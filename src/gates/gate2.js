@@ -21,7 +21,8 @@ async function checkTimeout(gateId) {
   if (!state || state.status !== 'pending') return;
   const now = Date.now();
 
-  if (config.demo.gateAutoApprove && now >= new Date(state.autoApproveAt).getTime()) {
+  // In slack mode we wait for a real button click — no demo auto-approve.
+  if (config.demo.gateMode !== 'slack' && config.demo.gateAutoApprove && now >= new Date(state.autoApproveAt).getTime()) {
     await store.update(key(gateId), { status: 'approved', approvedBy: 'auto-approve' });
     await notifier.sendTimeoutNotice(state.channelId, gateId, 'auto-approve');
     return;

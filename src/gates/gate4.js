@@ -26,6 +26,21 @@ async function runGate4(ticket, pr, summary, assignment) {
     const { askGate4 } = require('./cli');
     return askGate4(ticket, pr, summary);
   }
+
+  // Slack mode — wait for the Approve / Request changes button.
+  if (config.demo.gateMode === 'slack') {
+    const store = require('../state/gateStore');
+    const key = `gate4:${ticket.key}`;
+    await store.set(key, { status: 'pending' });
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    for (;;) {
+      const s = await store.get(key);
+      if (s && s.status === 'approved') return 'approved';
+      if (s && s.status === 'rejected') return 'rejected';
+      await sleep(2000);
+    }
+  }
+
   console.log(`✅ [Gate 4] auto-approved PR: ${pr?.prUrl || 'no PR'}`);
   return 'approved';
 }

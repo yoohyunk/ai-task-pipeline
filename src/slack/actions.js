@@ -159,20 +159,49 @@ function registerGate2Actions(app) {
   });
 }
 
+const gate4Key = (ticketKey) => `gate4:${ticketKey}`;
+
 /**
- * Create a Bolt app (only used in real interactive mode). Returns null in mock
- * mode or when credentials are missing.
+ * Register Gate 4 handlers — approve & merge / request changes on the agent PR.
+ * @param {import('@slack/bolt').App} app
+ */
+function registerGate4Actions(app) {
+  app.action(/^gate4_approve_/, async ({ ack, action }) => {
+    await ack();
+    await store.update(gate4Key(action.value), { status: 'approved' });
+  });
+  app.action(/^gate4_changes_/, async ({ ack, action }) => {
+    await ack();
+    await store.update(gate4Key(action.value), { status: 'rejected' });
+  });
+}
+
+/**
+ * Create a Bolt app for interactive gates. Prefers Socket Mode (app-level
+ * token) so buttons work with no public endpoint / ngrok. Returns null in mock
+ * mode or when no usable credentials are present.
  */
 function createSlackApp() {
-  if (notifier.mockSlack || !config.slack.signingSecret) return null;
+  if (notifier.mockSlack) return null;
   const { App } = require('@slack/bolt');
-  const app = new App({
-    token: config.slack.botToken,
-    signingSecret: config.slack.signingSecret,
-  });
+
+  let app;
+  if (config.slack.appToken) {
+    app = new App({
+      token: config.slack.botToken,
+      appToken: config.slack.appToken,
+      socketMode: true,
+    });
+  } else if (config.slack.signingSecret) {
+    app = new App({ token: config.slack.botToken, signingSecret: config.slack.signingSecret });
+  } else {
+    return null;
+  }
+
   registerGate1Actions(app);
   registerGate2Actions(app);
+  registerGate4Actions(app);
   return app;
 }
 
-module.exports = { registerGate1Actions, registerGate2Actions, createSlackApp };
+module.exports = { registerGate1Actions, registerGate2Actions, registerGate4Actions, createSlackApp };
