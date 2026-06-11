@@ -17,6 +17,10 @@ run()
     console.log(
       `   Tickets:   ${result.dedupResults.filter((r) => r.status !== 'duplicate').length} created`
     );
+    console.log(`   PRs:       ${result.prs.length} opened`);
+    if (result.prs.length) {
+      result.prs.forEach((p) => console.log(`              ${p.prUrl}`));
+    }
     await store.close();
   })
   .catch(async (err) => {

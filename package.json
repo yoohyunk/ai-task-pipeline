@@ -4,7 +4,8 @@
   "description": "AI Task Pipeline — ingest team conversations, extract action items with Claude, human gates, dedup, and Jira ticket creation.",
   "main": "src/orchestrator.js",
   "scripts": {
-    "demo": "node src/demo.js",
+    "demo": "GATE_MODE=cli node src/demo.js",
+    "demo:auto": "GATE_MODE=auto GATE_AUTO_APPROVE_MS=1500 node src/demo.js",
     "dev": "nodemon src/demo.js",
     "start": "node src/orchestrator.js"
   },
