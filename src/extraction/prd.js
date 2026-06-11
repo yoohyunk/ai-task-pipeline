@@ -93,4 +93,4 @@ async function generatePRD(task) {
   });
 }
 
-module.exports = { generatePRD };
+module.exports = { generatePRD, PRD_SCHEMA: PRD_TOOL.input_schema };

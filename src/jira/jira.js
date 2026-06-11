@@ -136,6 +136,19 @@ async function createTicket(task) {
   });
 }
 
+// Update fields (summary / description ADF / priority) on an existing issue.
+async function updateIssue(key, fields) {
+  if (mockJira) {
+    const t = mockTickets.find((x) => x.key === key);
+    if (t && fields.summary) t.summary = fields.summary;
+    console.log(`   [Jira mock] updated ${key}: ${Object.keys(fields).join(', ')}`);
+    return true;
+  }
+  return withRetry(() =>
+    axios.put(`${config.jira.baseUrl}/rest/api/3/issue/${key}`, { fields }, { headers: jiraHeaders })
+  );
+}
+
 async function deleteIssue(key) {
   if (mockJira) {
     const t = mockTickets.find((x) => x.key === key);
@@ -198,6 +211,7 @@ module.exports = {
   resolveAccountId,
   jqlSearch,
   createTicket,
+  updateIssue,
   deleteIssue,
   addComment,
   transitionIssue,

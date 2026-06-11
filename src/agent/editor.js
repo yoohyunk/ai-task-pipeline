@@ -67,4 +67,71 @@ async function applyTaskEdits(tasks, instruction) {
   });
 }
 
-module.exports = { applyTaskEdits };
+// ── Gate 2: edit created tickets / their PRDs ────────────────────────────
+const { PRD_SCHEMA } = require('../extraction/prd');
+
+const TICKET_EDIT_TOOL = {
+  name: 'apply_ticket_edits',
+  description:
+    'Apply the user instruction to the listed tickets (title, priority, and/or ' +
+    'PRD body). Return ONLY the tickets that changed, each with its key and the ' +
+    'updated fields, plus a one-line summary.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      changed: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            key: { type: 'string', description: 'the ticket key, e.g. KAN-28' },
+            title: { type: 'string' },
+            priority: { type: 'string', enum: ['high', 'medium', 'low'] },
+            prd: PRD_SCHEMA,
+          },
+          required: ['key'],
+        },
+      },
+      summary: { type: 'string', description: 'one short line describing what changed' },
+    },
+    required: ['changed', 'summary'],
+  },
+};
+
+/**
+ * Apply a natural-language edit to a set of tickets (and their PRDs).
+ * @param {object[]} tickets - [{ key, title, priority, prd }]
+ * @param {string} instruction
+ * @returns {Promise<{changed: object[], summary: string}>}
+ */
+async function applyTicketEdits(tickets, instruction) {
+  if (config.demo.mockExternal || !config.claude.apiKey) {
+    return { changed: [], summary: 'conversational editing needs live Claude' };
+  }
+  const Anthropic = require('@anthropic-ai/sdk');
+  const client = new Anthropic({ apiKey: config.claude.apiKey });
+  return withRetry(async () => {
+    const res = await client.messages.create({
+      model: config.claude.model,
+      max_tokens: 2048,
+      tools: [TICKET_EDIT_TOOL],
+      tool_choice: { type: 'tool', name: 'apply_ticket_edits' },
+      messages: [
+        {
+          role: 'user',
+          content:
+            `Tickets (JSON):\n${JSON.stringify(tickets, null, 2)}\n\n` +
+            `User instruction: "${instruction}"\n\n` +
+            `Identify which ticket(s) the instruction targets (by key, title, or ` +
+            `description) and return only those, with their full updated fields. ` +
+            `When editing a PRD, return the complete updated PRD, not a diff.`,
+        },
+      ],
+    });
+    const block = res.content.find((b) => b.type === 'tool_use');
+    if (!block) return { changed: [], summary: 'no change' };
+    return { changed: block.input.changed || [], summary: block.input.summary || 'updated' };
+  });
+}
+
+module.exports = { applyTaskEdits, applyTicketEdits };
