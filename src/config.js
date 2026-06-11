@@ -18,6 +18,12 @@ const config = {
     botToken: process.env.SLACK_BOT_TOKEN,
     signingSecret: process.env.SLACK_SIGNING_SECRET,
     approvalChannel: process.env.SLACK_APPROVAL_CHANNEL,
+    // App-level token (xapp-...) enables Socket Mode → buttons work with no
+    // public endpoint / ngrok.
+    appToken: process.env.SLACK_APP_TOKEN,
+    // Channel to read source conversations from in live ingestion mode.
+    // Defaults to the approval channel.
+    ingestChannel: process.env.SLACK_INGEST_CHANNEL || process.env.SLACK_APPROVAL_CHANNEL,
   },
   redis: {
     url: process.env.REDIS_URL || 'redis://localhost:6379',
@@ -34,6 +40,10 @@ const config = {
     gateAutoApproveMs: parseInt(process.env.GATE_AUTO_APPROVE_MS || '8000', 10),
     // When true, external services with missing keys fall back to mock mode.
     mockExternal: process.env.MOCK_EXTERNAL !== 'false',
+    // Where task source conversations come from:
+    //   'fixtures' (default) — synthetic JSON in fixtures/
+    //   'slack'              — live messages from the ingest channel
+    ingestSource: process.env.INGEST_SOURCE || 'fixtures',
   },
   agent: {
     // 'symbolic' — apply pre-canned diffs to demo-app/ (no LLM, offline)

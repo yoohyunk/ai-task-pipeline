@@ -1,13 +1,26 @@
+const config = require('../config');
 const { buildContext } = require('./contextBuilder');
 const slackFixture = require('../../fixtures/slack-threads.json');
 const meetFixture = require('../../fixtures/meet-transcript.json');
 const calFixture = require('../../fixtures/calendar-event.json');
 
 /**
- * Load synthetic fixtures and build context packets for the pipeline.
+ * Load source conversations and build context packets.
+ *
+ *   INGEST_SOURCE=fixtures (default) — synthetic JSON in fixtures/
+ *   INGEST_SOURCE=slack             — live messages from the ingest channel
+ *
  * @returns {Promise<Array>} context packets
  */
 async function ingest() {
+  if (config.demo.ingestSource === 'slack') {
+    const { fetchSlackThreads } = require('./slackLive');
+    const slack = await fetchSlackThreads();
+    // Live mode reads Slack only; meet/calendar can also be posted to the
+    // channel and will arrive as slack threads. (meet/calendar omitted → empty)
+    return buildContext({ slack });
+  }
+
   return buildContext({
     slack: slackFixture,
     meet: meetFixture,
@@ -21,7 +34,7 @@ module.exports = { ingest };
 if (require.main === module) {
   ingest()
     .then((packets) => {
-      console.log(`\n${packets.length} context packets:\n`);
+      console.log(`\nsource: ${config.demo.ingestSource}\n${packets.length} context packets:\n`);
       packets.forEach((p, i) => {
         console.log(`── packet ${i + 1}/${packets.length} ` + '─'.repeat(40));
         console.log(`chunkId: ${p.chunkId}`);
