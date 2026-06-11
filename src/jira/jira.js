@@ -94,15 +94,15 @@ async function jqlSearch(title) {
   const keywords = extractKeywords(title);
   if (!keywords.length) return [];
 
-  const jql = encodeURIComponent(
+  const jql =
     `project = "${config.jira.project}" AND text ~ "${keywords.join(' ')}" ` +
-      `AND status NOT IN (Done, Closed, "Won't Do") ORDER BY created DESC`
-  );
+    `AND status NOT IN (Done, Closed, "Won't Do") ORDER BY created DESC`;
   return withRetry(async () => {
-    const { data } = await axios.get(
-      `${config.jira.baseUrl}/rest/api/3/search?jql=${jql}&maxResults=20&fields=summary,description,status`,
-      { headers: jiraHeaders }
-    );
+    // New endpoint — the legacy /rest/api/3/search was removed (HTTP 410).
+    const { data } = await axios.get(`${config.jira.baseUrl}/rest/api/3/search/jql`, {
+      headers: jiraHeaders,
+      params: { jql, maxResults: 20, fields: 'summary,description,status' },
+    });
     return (data.issues || []).map((i) => ({
       id: i.id,
       key: i.key,
