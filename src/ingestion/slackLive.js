@@ -54,12 +54,14 @@ function isIngestible(m) {
   return true;
 }
 
-// "alice: the bug is back" → { speaker: 'alice', text: 'the bug is back' }
+// Produce a line in the SAME shape as fixtures/slack-threads.json ({ user, text,
+// ts }) so normalizeSlack (which reads `user`) picks up the speaker.
+// "alice: the bug is back" → { user: 'alice', text: 'the bug is back' }
 async function toLine(m) {
   const match = /^\s*([A-Za-z][\w .-]{0,30}?):\s+(.+)$/s.exec(m.text.trim());
-  if (match) return { speaker: match[1].trim(), text: match[2].trim(), ts: m.ts };
-  const speaker = (await resolveName(m.user)) || 'unknown';
-  return { speaker, text: m.text.trim(), ts: m.ts };
+  if (match) return { user: match[1].trim(), text: match[2].trim(), ts: m.ts };
+  const user = (await resolveName(m.user)) || 'teammate';
+  return { user, text: m.text.trim(), ts: m.ts };
 }
 
 /**

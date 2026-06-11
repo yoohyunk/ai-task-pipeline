@@ -107,6 +107,10 @@ async function run() {
     ui.agent(`${ticket.key}  PR → ${pr.prUrl}`);
     prs.push(pr);
 
+    // PR is up for review → move ticket to In Review.
+    await jira.transitionIssue(ticket.key, 'In Review');
+    ui.agent(`${ticket.key}  → In Review`);
+
     ui.gate('Gate 4 · review agent PR');
     const decision = await runGate4(ticket, pr, summary, assignment);
 
