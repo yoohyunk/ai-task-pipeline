@@ -46,12 +46,15 @@ const config = {
   },
 };
 
-// fail fast if critical keys are missing.
-// In mock mode (MOCK_EXTERNAL=true, the default) the pipeline runs offline,
-// so no real keys are required. Set MOCK_EXTERNAL=false to require live keys.
-const required = config.demo.mockExternal ? [] : ['ANTHROPIC_API_KEY'];
-for (const key of required) {
-  if (!process.env[key]) throw new Error(`Missing required env var: ${key}`);
+// Each external service goes live only when MOCK_EXTERNAL=false AND its own
+// credentials are present; otherwise that service falls back to mock. This lets
+// you enable services one at a time (e.g. real Jira while extraction stays
+// mock) without needing every key at once. So no key is strictly required —
+// we only warn when running live without a Claude key.
+if (!config.demo.mockExternal && !config.claude.apiKey) {
+  console.warn(
+    '[config] MOCK_EXTERNAL=false but no ANTHROPIC_API_KEY — extraction will use mock output.'
+  );
 }
 
 module.exports = config;

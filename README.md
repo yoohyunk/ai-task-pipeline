@@ -40,10 +40,19 @@ edit `.env`:
 | + real embedding dedup | `MOCK_EXTERNAL=false` | `GEMINI_API_KEY` |
 | Wait for real Slack clicks | `GATE_AUTO_APPROVE=false` | Slack bot token + a running Bolt server (Socket Mode or a public endpoint via ngrok) for button callbacks |
 
-`MOCK_EXTERNAL=false` makes `ANTHROPIC_API_KEY` mandatory; the other services
-each fall back to mock independently if their keys are absent, so you can enable
-them one at a time. The interactive Slack handlers live in
-`src/slack/actions.js` and are wired through `createSlackApp()`.
+With `MOCK_EXTERNAL=false`, each service goes live **only if its own
+credentials are present** and otherwise falls back to mock — so you can enable
+them one at a time (e.g. real Jira while extraction stays mock). No key is
+strictly required; you just get a warning if you run live without a Claude key.
+The interactive Slack handlers live in `src/slack/actions.js` and are wired
+through `createSlackApp()`.
+
+Example — real Jira only, everything else mock:
+
+```bash
+# fill JIRA_* in .env, then:
+MOCK_EXTERNAL=false npm run demo
+```
 
 ```bash
 # fastest live test — real Claude, everything else mock, gates auto-approve
