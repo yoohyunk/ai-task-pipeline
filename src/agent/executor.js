@@ -12,7 +12,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const config = require('../config');
 
 const REPO_ROOT = path.resolve(__dirname, '../..');
@@ -148,9 +148,10 @@ async function executeTask(ticket, assignment) {
     git(`worktree add -q -b ${realBranch} "${wtPath}" main`);
     try {
       fs.writeFileSync(path.join(wtPath, file), newContent);
-      execSync(`git add ${file}`, { cwd: wtPath });
-      execSync(`git commit -q -m ${JSON.stringify(msg)}`, { cwd: wtPath });
-      execSync(`git push -q -u origin ${realBranch}`, { cwd: wtPath });
+      execFileSync('git', ['add', file], { cwd: wtPath });
+      // execFileSync (no shell) keeps real newlines in the commit message body.
+      execFileSync('git', ['commit', '-q', '-m', msg], { cwd: wtPath });
+      execFileSync('git', ['push', '-q', '-u', 'origin', realBranch], { cwd: wtPath });
     } finally {
       git(`worktree remove --force "${wtPath}"`);
     }

@@ -8,7 +8,7 @@
  * PR title: [{TICKET_KEY}] {ticket.title}
  */
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const config = require('../config');
 
 const REPO_ROOT = path.resolve(__dirname, '../..');
@@ -52,8 +52,11 @@ async function createPR({ branch, ticket, summary, testResults, changedFiles = [
 
   // Real PR via gh. The branch was already pushed from the agent's worktree,
   // and the main working dir was never switched, so just open the PR.
-  const prUrl = execSync(
-    `gh pr create --base main --head ${branch} --title ${JSON.stringify(title)} --body ${JSON.stringify(body)}`,
+  // Use execFileSync (args array, no shell) so newlines in the body are
+  // preserved instead of arriving as literal "\n".
+  const prUrl = execFileSync(
+    'gh',
+    ['pr', 'create', '--base', 'main', '--head', branch, '--title', title, '--body', body],
     { cwd: REPO_ROOT, encoding: 'utf8' }
   ).trim().split('\n').pop();
   const prNumber = Number((prUrl.match(/\/pull\/(\d+)/) || [])[1]) || null;
