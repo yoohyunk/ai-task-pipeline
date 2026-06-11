@@ -48,6 +48,13 @@ async function run() {
     allTasks.push(...(await extractWithRetry(packet)));
   }
   ui.detail(`${allTasks.length} tasks extracted`);
+
+  // Nothing new (common on a scheduled tick) — skip the gates entirely.
+  if (allTasks.length === 0) {
+    ui.note('no new tasks — nothing to review');
+    return { packets, allTasks: [], approvedTasks: [], dedupResults: [], confirmedTickets: [], prs: [] };
+  }
+
   // Show where each task came from (provenance).
   const byChannel = {};
   for (const t of allTasks) {

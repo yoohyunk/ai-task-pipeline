@@ -73,8 +73,18 @@ async function fetchSlackThreads(channelId = config.slack.ingestChannel) {
   const c = client();
   const chan = await channelName(channelId);
 
-  const hist = await c.conversations.history({ channel: channelId, limit: 200 });
+  const watermark = require('../state/watermark');
+  const useWm = config.demo.useWatermark;
+  const since = useWm ? await watermark.get(channelId) : null;
+
+  const hist = await c.conversations.history({
+    channel: channelId,
+    limit: 200,
+    ...(since ? { oldest: since } : {}),
+  });
   let messages = (hist.messages || []).slice();
+  // `oldest` is inclusive — drop the boundary message we already processed.
+  if (since) messages = messages.filter((m) => Number(m.ts) > Number(since));
 
   // Expand thread replies for any parent that has them.
   for (const m of hist.messages || []) {
@@ -108,6 +118,13 @@ async function fetchSlackThreads(channelId = config.slack.ingestChannel) {
       thread: lines,
     });
   }
+
+  // Advance the watermark to the newest message processed this run.
+  if (useWm && messages.length) {
+    const newest = messages[messages.length - 1].ts;
+    await watermark.set(channelId, newest);
+  }
+
   return threads;
 }
 

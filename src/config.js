@@ -44,6 +44,9 @@ const config = {
     //   'fixtures' (default) — synthetic JSON in fixtures/
     //   'slack'              — live messages from the ingest channel
     ingestSource: process.env.INGEST_SOURCE || 'fixtures',
+    // Read only new messages since the last run (per-channel watermark).
+    // On for the scheduled daemon; off for one-shot demos (so they can replay).
+    useWatermark: process.env.INGEST_WATERMARK === 'true',
   },
   agent: {
     // 'symbolic' — apply pre-canned diffs to demo-app/ (no LLM, offline)

@@ -7,6 +7,7 @@
     "demo": "GATE_MODE=cli node src/demo.js",
     "demo:auto": "GATE_MODE=auto GATE_AUTO_APPROVE_MS=1500 node src/demo.js",
     "demo:slack": "INGEST_SOURCE=slack MOCK_EXTERNAL=false GATE_MODE=slack node src/demo.js",
+    "watch": "INGEST_SOURCE=slack MOCK_EXTERNAL=false GATE_MODE=slack INGEST_WATERMARK=true node src/watch.js",
     "reset:demo": "node scripts/reset-demo-app.js",
     "dev": "nodemon src/demo.js",
     "start": "node src/orchestrator.js"
