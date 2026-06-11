@@ -131,8 +131,10 @@ async function runGate2(results) {
 
   // Let thread replies edit tickets/PRDs conversationally.
   if (config.demo.gateMode === 'slack') {
-    const { linkThread } = require('../slack/converse');
-    await linkThread(sent.ts, gateId, 'gate2');
+    const converse = require('../slack/converse');
+    const rootTs = require('../slack/runContext').rootTs();
+    if (rootTs) await converse.setActiveGate(rootTs, 'gate2', gateId);
+    else await converse.linkThread(sent.ts, gateId, 'gate2');
   }
 
   const pollMs = config.demo.gateAutoApprove ? 1000 : 5000;

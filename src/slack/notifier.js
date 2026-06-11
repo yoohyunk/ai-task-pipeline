@@ -16,6 +16,12 @@ function getClient() {
   return webClient;
 }
 
+// Post everything as a reply under the current run's root thread (if any).
+function inThread() {
+  const ts = require('./runContext').rootTs();
+  return ts ? { thread_ts: ts } : {};
+}
+
 // ── Gate 1 (task review) blocks ──────────────────────────────────────────
 // When status !== 'pending' the gate is resolved: drop all buttons and show a
 // result banner so it can't be clicked again.
@@ -237,6 +243,7 @@ async function sendGate1(gateState) {
     channel: config.slack.approvalChannel,
     text: `Gate 1 — review ${gateState.tasks.length} extracted tasks`,
     blocks,
+    ...inThread(),
   });
   return { channel: res.channel, ts: res.ts };
 }
@@ -280,6 +287,7 @@ async function sendGate2(gateState) {
     channel: config.slack.approvalChannel,
     text: `Gate 2 — review ${created} created tickets`,
     blocks,
+    ...inThread(),
   });
   return { channel: res.channel, ts: res.ts };
 }
@@ -345,6 +353,7 @@ async function sendAgentReview(ticket, pr, summary, assignment) {
     channel: config.slack.approvalChannel,
     text: `Agent finished ${ticket.key} — PR ready for review`,
     blocks: buildAgentReviewBlocks(ticket, pr, summary, assignment),
+    ...inThread(),
   });
 }
 
@@ -354,7 +363,7 @@ async function sendTimeoutNotice(channelId, gateId, reason = 'timeout') {
     console.log(`\n🔔 [Slack mock] ${text}`);
     return;
   }
-  await getClient().chat.postMessage({ channel: channelId, text });
+  await getClient().chat.postMessage({ channel: channelId, text, ...inThread() });
 }
 
 module.exports = {

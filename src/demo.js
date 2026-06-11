@@ -17,7 +17,16 @@ async function main() {
     slackApp = createSlackApp();
     if (slackApp) {
       await slackApp.start();
-      console.log(ui.dim('  ⚡ Slack Socket Mode connected — gate buttons are live\n'));
+      // One thread per run: post a root message; all gates reply under it.
+      const notifier = require('./slack/notifier');
+      const runContext = require('./slack/runContext');
+      const root = await notifier.getClient().chat.postMessage({
+        channel: config.slack.approvalChannel,
+        text: '🚀 *AI Task Pipeline* — run started. Gate reviews will appear in this thread; reply here to edit.',
+      });
+      runContext.set({ rootTs: root.ts, channel: root.channel });
+      await store.set(`thread:${root.ts}`, { type: 'run' });
+      console.log(ui.dim('  ⚡ Slack Socket Mode connected — one run thread, buttons live\n'));
     } else {
       console.log(
         ui.yellow('  ⚠ GATE_MODE=slack but no Socket Mode app (need MOCK_EXTERNAL=false + SLACK_APP_TOKEN).')

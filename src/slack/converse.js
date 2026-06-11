@@ -18,9 +18,15 @@ const gate1Key = (id) => `gate:${id}`;
 const gate2Key = (id) => `gate2:${id}`;
 const threadKey = (ts) => `thread:${ts}`;
 
-// Record which gate a posted message's thread belongs to.
+// Record which gate a posted message's thread belongs to (per-gate-thread mode).
 async function linkThread(messageTs, gateId, type) {
   await store.set(threadKey(messageTs), { gateId, type });
+}
+
+// One-thread-per-run mode: remember which gate is currently editable so replies
+// in the run thread route to it.
+async function setActiveGate(rootTs, type, gateId) {
+  await store.set(`activegate:${rootTs}`, { type, gateId });
 }
 
 async function handleGate1Reply(event, client, gateId) {
@@ -107,8 +113,12 @@ function registerConversation(app) {
     if (!event || event.bot_id || event.subtype || !event.text) return;
     if (!event.thread_ts || event.thread_ts === event.ts) return;
 
-    const map = await store.get(threadKey(event.thread_ts));
-    if (!map) return; // not a gate thread
+    let map = await store.get(threadKey(event.thread_ts));
+    // run-thread mode: replies land on the run root → route to the active gate
+    if (map && map.type === 'run') {
+      map = await store.get(`activegate:${event.thread_ts}`);
+    }
+    if (!map || !map.gateId) return; // not an editable gate thread right now
 
     const handler = map.type === 'gate2' ? handleGate2Reply : handleGate1Reply;
     await handler(event, client, map.gateId).catch(async (err) => {
@@ -119,4 +129,4 @@ function registerConversation(app) {
   });
 }
 
-module.exports = { registerConversation, linkThread };
+module.exports = { registerConversation, linkThread, setActiveGate };
