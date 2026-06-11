@@ -47,7 +47,7 @@ async function createPR({ branch, ticket, summary, testResults, changedFiles = [
     console.log(`   title: ${title}`);
     console.log(`   branch: ${branch}`);
     body.split('\n').forEach((l) => console.log(`   │ ${l}`));
-    return { prNumber: null, prUrl: `https://github.com/mock/pull/0 (mock)`, branch };
+    return { prNumber: null, prUrl: `https://github.com/mock/pull/0 (mock)`, branch, changedFiles };
   }
 
   // Real PR via gh.
@@ -63,7 +63,7 @@ async function createPR({ branch, ticket, summary, testResults, changedFiles = [
     git('checkout -q main');
   }
   const prNumber = Number((prUrl.match(/\/pull\/(\d+)/) || [])[1]) || null;
-  return { prNumber, prUrl, branch };
+  return { prNumber, prUrl, branch, changedFiles };
 }
 
 module.exports = { createPR, buildBody };

@@ -147,6 +147,35 @@ async function deleteIssue(key) {
   );
 }
 
+// Move an issue to a target status by matching an available transition by the
+// destination status name (or transition name). No-op + warn if none matches.
+async function transitionIssue(key, targetStatusName) {
+  if (mockJira) {
+    console.log(`   [Jira mock] ${key} → ${targetStatusName}`);
+    return true;
+  }
+  return withRetry(async () => {
+    const { data } = await axios.get(
+      `${config.jira.baseUrl}/rest/api/3/issue/${key}/transitions`,
+      { headers: jiraHeaders }
+    );
+    const want = targetStatusName.toLowerCase();
+    const t = (data.transitions || []).find(
+      (x) => x.to?.name?.toLowerCase() === want || x.name?.toLowerCase() === want
+    );
+    if (!t) {
+      console.warn(`   [Jira] no transition to "${targetStatusName}" for ${key}`);
+      return false;
+    }
+    await axios.post(
+      `${config.jira.baseUrl}/rest/api/3/issue/${key}/transitions`,
+      { transition: { id: t.id } },
+      { headers: jiraHeaders }
+    );
+    return true;
+  });
+}
+
 async function addComment(key, text) {
   if (mockJira) {
     console.log(`   [Jira mock] comment on ${key}: ${text.replace(/\n/g, ' ')}`);
@@ -171,4 +200,5 @@ module.exports = {
   createTicket,
   deleteIssue,
   addComment,
+  transitionIssue,
 };

@@ -263,6 +263,60 @@ async function updateGate2(gateState) {
   });
 }
 
+// ── Agent PR review (Gate 4) ─────────────────────────────────────────────
+function buildAgentReviewBlocks(ticket, pr, summary, assignment) {
+  const prTitle = `[${ticket.key}] ${ticket.title}`;
+  return [
+    { type: 'header', text: { type: 'plain_text', text: '🤖 Agent finished a task — review needed' } },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text:
+          `*${ticket.key} — ${ticket.title}*\n` +
+          `*What*: ${summary.what}\n` +
+          `*How*: ${summary.how}\n` +
+          `*Changed files*: \`${(pr.changedFiles || []).join('`, `')}\`\n` +
+          `*What to check*: ${summary.checkPoints}\n` +
+          `*Assignee*: ${assignment?.assignee || 'TBD'} — please review`,
+      },
+    },
+    { type: 'section', text: { type: 'mrkdwn', text: `:link: <${pr.prUrl}|${prTitle}>` } },
+    {
+      type: 'actions',
+      elements: [
+        { type: 'button', text: { type: 'plain_text', text: 'Approve & merge ✅' }, style: 'primary', action_id: `gate4_approve_${ticket.key}`, value: ticket.key },
+        { type: 'button', text: { type: 'plain_text', text: 'Request changes 🔁' }, action_id: `gate4_changes_${ticket.key}`, value: ticket.key },
+      ],
+    },
+  ];
+}
+
+function renderAgentReviewConsole(ticket, pr, summary, assignment) {
+  return [
+    '\n🔔 [Slack mock] 🤖 Agent finished a task — review needed:',
+    `   ${ticket.key} — ${ticket.title}`,
+    `   What:  ${summary.what}`,
+    `   How:   ${summary.how}`,
+    `   Files: ${(pr.changedFiles || []).join(', ')}`,
+    `   PR:    ${pr.prUrl}`,
+    `   Assignee: ${assignment?.assignee || 'TBD'}`,
+    '   [Approve & merge ✅] [Request changes 🔁]',
+  ].join('\n');
+}
+
+async function sendAgentReview(ticket, pr, summary, assignment) {
+  if (mockSlack) {
+    console.log(renderAgentReviewConsole(ticket, pr, summary, assignment));
+    return;
+  }
+  await getClient().chat.postMessage({
+    channel: config.slack.approvalChannel,
+    text: `Agent finished ${ticket.key} — PR ready for review`,
+    blocks: buildAgentReviewBlocks(ticket, pr, summary, assignment),
+  });
+}
+
 async function sendTimeoutNotice(channelId, gateId, reason = 'timeout') {
   const text = `⏰ Gate \`${gateId}\` auto-approved (${reason}).`;
   if (mockSlack) {
@@ -282,5 +336,7 @@ module.exports = {
   buildGate2Blocks,
   sendGate2,
   updateGate2,
+  buildAgentReviewBlocks,
+  sendAgentReview,
   sendTimeoutNotice,
 };

@@ -7,6 +7,7 @@
  */
 const readline = require('readline/promises');
 const { stdin, stdout } = require('process');
+const ui = require('../ui');
 
 // One shared readline interface for the whole process. Recreating it per gate
 // discards readline's read-ahead buffer (losing piped lines) and a fresh
@@ -54,12 +55,13 @@ function closeCli() {
 }
 
 function printTasks(tasks) {
+  console.log('');
   tasks.forEach((t, i) => {
-    console.log(
-      `   ${i + 1}. ${t.title}  ` +
-        `(${t.priority} · ${t.assignee_hint || 'TBD'} · ${t.source})`
-    );
+    const n = String(i + 1).padStart(2, ' ');
+    console.log(`   ${ui.bold(n)}. ${t.title}`);
+    console.log(ui.dim(`       ${t.priority} · ${t.assignee_hint || 'TBD'} · ${t.source}`));
   });
+  console.log('');
 }
 
 /**
@@ -69,12 +71,10 @@ function printTasks(tasks) {
  */
 async function askGate1(tasks) {
   let list = [...tasks];
-  console.log('\n🔑 Gate 1 — review extracted tasks:');
   for (;;) {
     printTasks(list);
-    const cmd = await prompt(
-      '   > [enter]=approve all · r=reject · rm N=remove · e N=edit title : '
-    );
+    console.log(ui.dim('   commands:  [enter] approve all   ·   r reject   ·   rm N remove   ·   e N edit'));
+    const cmd = await prompt('   ▸ ');
     if (cmd === '' || cmd === 'a' || cmd === 'approve') {
       return { decision: 'approved', tasks: list };
     }
@@ -113,20 +113,24 @@ async function askGate1(tasks) {
  * @returns {Promise<object[]>} confirmed tickets
  */
 async function askGate2(tickets, onMerge, onDelete) {
-  console.log('\n🔑 Gate 2 — review created tickets:');
   for (;;) {
+    console.log('');
     tickets.forEach((t, i) => {
+      const n = String(i + 1).padStart(2, ' ');
       if (t.status === 'duplicate') {
-        console.log(`   ${i + 1}. ℹ️ skipped (dup) ${t.issue.key} — ${t.issue.summary}`);
+        console.log(`   ${ui.bold(n)}. ${ui.dim('⊘ ' + t.issue.key + ' (duplicate)')}  ${t.issue.summary}`);
       } else if (t._removed) {
-        console.log(`   ${i + 1}. ⊘ ${t.issue.key} (${t._mergedInto ? 'merged → ' + t._mergedInto : 'deleted'})`);
+        console.log(`   ${ui.bold(n)}. ${ui.dim('⊘ ' + t.issue.key + ' (' + (t._mergedInto ? 'merged → ' + t._mergedInto : 'deleted') + ')')}`);
       } else if (t.status === 'created_with_warning') {
-        console.log(`   ${i + 1}. ⚠️ ${t.issue.key} — ${t.issue.summary} (possible dup of ${t.similarTo.key})`);
+        console.log(`   ${ui.bold(n)}. ⚠ ${t.issue.key}  ${t.issue.summary}`);
+        console.log(ui.dim(`       possible dup of ${t.similarTo.key}`));
       } else {
-        console.log(`   ${i + 1}. ✅ ${t.issue.key} — ${t.issue.summary}`);
+        console.log(`   ${ui.bold(n)}. ${ui.green('✓')} ${t.issue.key}  ${t.issue.summary}`);
       }
     });
-    const cmd = await prompt('   > [enter]=approve all · d N=delete · m N=merge : ');
+    console.log('');
+    console.log(ui.dim('   commands:  [enter] approve all   ·   d N delete   ·   m N merge'));
+    const cmd = await prompt('   ▸ ');
     if (cmd === '' || cmd === 'a' || cmd === 'approve') break;
     const del = /^d(?:elete)?\s+(\d+)$/.exec(cmd);
     if (del) {
@@ -148,16 +152,18 @@ async function askGate2(tickets, onMerge, onDelete) {
  * @returns {Promise<'approved'|'rejected'>}
  */
 async function askGate4(ticket, pr, summary) {
-  console.log('\n🔑 Gate 4 — review the agent PR:');
-  console.log(`   Ticket:  ${ticket.key} — ${ticket.summary || ticket.title}`);
-  console.log(`   PR:      ${pr.prUrl}`);
+  console.log('');
+  console.log(`   ${ui.bold(ticket.key)}  ${ticket.summary || ticket.title}`);
+  console.log(`   ${ui.dim('PR')}      ${pr.prUrl}`);
   if (summary) {
-    console.log(`   What:    ${summary.what}`);
-    console.log(`   How:     ${summary.how}`);
-    console.log(`   Check:   ${summary.checkPoints}`);
-    if (summary.remaining) console.log(`   Left:    ${summary.remaining}`);
+    console.log(`   ${ui.dim('What')}    ${summary.what}`);
+    console.log(`   ${ui.dim('How')}     ${summary.how}`);
+    console.log(`   ${ui.dim('Check')}   ${summary.checkPoints}`);
+    if (summary.remaining) console.log(`   ${ui.dim('Left')}    ${summary.remaining}`);
   }
-  const cmd = await prompt('   > [enter]=approve · r=reject : ');
+  console.log('');
+  console.log(ui.dim('   commands:  [enter] approve & merge   ·   r request changes'));
+  const cmd = await prompt('   ▸ ');
   return cmd === 'r' || cmd === 'reject' ? 'rejected' : 'approved';
 }
 

@@ -1,4 +1,5 @@
 const config = require('./config');
+const ui = require('./ui');
 const { ingest } = require('./ingestion');
 const { extractWithRetry } = require('./extraction/extractor');
 const { runGate1 } = require('./gates/gate1');
@@ -11,11 +12,7 @@ const { executeTask, canHandle } = require('./agent/executor');
 const { generateSummary } = require('./agent/summarizer');
 const { createPR } = require('./github/pr');
 const { runGate4 } = require('./gates/gate4');
-
-function log(type, msg) {
-  const icons = { step: '🔵', gate: '🔑', info: '   ', stub: '⬜', agent: '🤖', error: '🔴' };
-  console.log(`${icons[type] || '  '} ${msg}`);
-}
+const jira = require('./jira/jira');
 
 // Build the agent's view of a confirmed ticket (carries original task hints).
 function toTicket(result) {
@@ -31,66 +28,59 @@ function toTicket(result) {
 
 async function run() {
   // ── Step 1: Ingest ──────────────────────────────────────────────
-  log('step', '1/10  Ingesting data sources...');
+  ui.step('1', 'Ingest data sources');
   const packets = await ingest();
-  log('info', `  → ${packets.length} context packets`);
+  ui.detail(`${packets.length} context packets built from Slack / Meet / calendar`);
 
   // ── Step 2: Extract ─────────────────────────────────────────────
-  log('step', '2/10  Extracting tasks with Claude...');
+  ui.step('2', 'Extract action items with Claude');
   const allTasks = [];
   for (const packet of packets) {
     allTasks.push(...(await extractWithRetry(packet)));
   }
-  log('info', `  → ${allTasks.length} tasks extracted`);
+  ui.detail(`${allTasks.length} tasks extracted`);
 
   // ── Gate 1 ──────────────────────────────────────────────────────
-  log('gate', '▶  Gate 1: task list review');
+  ui.gate('Gate 1 · review extracted tasks');
   const approvedTasks = await runGate1(allTasks);
-  log('info', `  → ${approvedTasks.length} tasks approved`);
+  ui.ok(`${approvedTasks.length} tasks approved`);
 
   // ── Step 3: Dedup + Jira ─────────────────────────────────────────
-  log('step', '3/10  Running dedup + creating Jira tickets...');
+  ui.step('3', 'Dedup + create Jira tickets');
   const dedupResults = [];
   for (const task of approvedTasks) {
     const result = await dedupAndCreate(task);
     result._task = task; // keep original hints for the agent
     dedupResults.push(result);
-    log('info', `  → [${result.status}] ${task.title}`);
+    const tag = { created: '✓ created  ', created_with_warning: '⚠ warning  ', duplicate: '⊘ duplicate' }[result.status];
+    ui.detail(`${tag}  ${result.issue.key}  ${task.title}`);
   }
 
   // ── Gate 2 ──────────────────────────────────────────────────────
-  log('gate', '▶  Gate 2: ticket review');
+  ui.gate('Gate 2 · review created tickets');
   const confirmedTickets = await runGate2(dedupResults);
-  log('info', `  → ${confirmedTickets.length} tickets confirmed`);
+  ui.ok(`${confirmedTickets.length} tickets confirmed`);
 
   // ── Steps 4–10: agent → PR → Gate 4 ──────────────────────────────
-  // Process up to AGENT_TASK_LIMIT tickets, preferring ones the agent can act on.
   const actionable = confirmedTickets.filter((r) => canHandle(r.issue.summary));
-  const chosen = (actionable.length ? actionable : confirmedTickets).slice(
-    0,
-    config.agent.taskLimit
-  );
-  log('step', `4/10  Agent processing ${chosen.length} ticket(s) (mode=${config.agent.mode})...`);
+  const chosen = (actionable.length ? actionable : confirmedTickets).slice(0, config.agent.taskLimit);
+  ui.step('4', `Agent works ${chosen.length} ticket(s)  ${ui.dim(`(mode=${config.agent.mode})`)}`);
 
   const prs = [];
   for (const result of chosen) {
     const ticket = toTicket(result);
 
-    // Step 5: assign
     const assignment = await assignAgent(ticket);
-    log('agent', `  ${ticket.key}  assign → ${assignment.assignee} (conf ${assignment.confidence})`);
+    ui.agent(`${ticket.key}  assign → ${assignment.assignee}  ${ui.dim(`(confidence ${assignment.confidence})`)}`);
 
-    // Gate 3: assignment review
     await runGate3(ticket, assignment);
 
-    // Step 6: execute
+    await jira.transitionIssue(ticket.key, 'In Progress');
     const work = await executeTask(ticket, assignment);
-    log('agent', `  ${ticket.key}  changed: ${work.changedFiles.join(', ')}`);
+    ui.agent(`${ticket.key}  In Progress · edited ${work.changedFiles.join(', ')}`);
 
-    // Step 7: summarize
     const summary = await generateSummary(ticket, work.changedFiles, work.diffSummary, work.log);
 
-    // Step 8: PR
     const pr = await createPR({
       branch: work.branch,
       ticket,
@@ -98,12 +88,18 @@ async function run() {
       testResults: 'not run (demo)',
       changedFiles: work.changedFiles,
     });
-    log('agent', `  ${ticket.key}  PR → ${pr.prUrl}`);
+    ui.agent(`${ticket.key}  PR → ${pr.prUrl}`);
     prs.push(pr);
 
-    // Gate 4: assignee review
-    const decision = await runGate4(ticket, pr, summary);
-    log('agent', `  ${ticket.key}  Gate 4 → ${decision}`);
+    ui.gate('Gate 4 · review agent PR');
+    const decision = await runGate4(ticket, pr, summary, assignment);
+
+    if (decision === 'approved') {
+      await jira.transitionIssue(ticket.key, 'Done');
+      ui.ok(`${ticket.key} approved → merged → Jira Done`);
+    } else {
+      ui.note(`${ticket.key} ${decision}`);
+    }
   }
 
   return { packets, allTasks, approvedTasks, dedupResults, confirmedTickets, prs };

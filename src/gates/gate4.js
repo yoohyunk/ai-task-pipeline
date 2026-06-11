@@ -14,10 +14,14 @@
  * @returns {Promise<'approved' | 'rejected'>}
  */
 const config = require('../config');
+const notifier = require('../slack/notifier');
 
 const MAX_REWORK_CYCLES = 3;
 
-async function runGate4(ticket, pr, summary) {
+async function runGate4(ticket, pr, summary, assignment) {
+  // Post the "agent finished — review needed" message (real Slack when live).
+  await notifier.sendAgentReview(ticket, pr, summary, assignment);
+
   if (config.demo.gateMode === 'cli') {
     const { askGate4 } = require('./cli');
     return askGate4(ticket, pr, summary);
