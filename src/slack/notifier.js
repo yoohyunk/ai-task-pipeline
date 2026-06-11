@@ -89,6 +89,100 @@ function buildEditModal(gateId, idx, task) {
   };
 }
 
+// ── Gate 2 (ticket review) blocks ────────────────────────────────────────
+function pct(score) {
+  return `${Math.round(score * 100)}%`;
+}
+
+function buildGate2TicketBlocks(gateId, ticket, idx) {
+  // Skipped duplicate — info only, no actions
+  if (ticket.status === 'duplicate') {
+    return [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text:
+            `ℹ️ *Skipped (duplicate)* — ${pct(ticket.score)} match with ${ticket.issue.key}\n` +
+            `"${ticket.issue.summary}"\n→ Already tracked: <${issueUrlSafe(ticket.issue.key)}|${ticket.issue.key}>`,
+        },
+      },
+    ];
+  }
+
+  // Possible duplicate — side-by-side comparison + 3 choices
+  if (ticket.status === 'created_with_warning') {
+    return [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text:
+            `⚠️ *Possible duplicate detected* (${pct(ticket.similarTo.score)} similar)\n\n` +
+            `*New ticket* — ${ticket.issue.key}\n${ticket.issue.summary}\n\n` +
+            `*Existing ticket* — ${ticket.similarTo.key}\n` +
+            `<${issueUrlSafe(ticket.similarTo.key)}|View ${ticket.similarTo.key}>`,
+        },
+      },
+      {
+        type: 'actions',
+        elements: [
+          { type: 'button', text: { type: 'plain_text', text: 'Keep separate ✅' }, style: 'primary', action_id: `gate2_keep_${idx}`, value: `${gateId}_${idx}` },
+          { type: 'button', text: { type: 'plain_text', text: `Merge → ${ticket.similarTo.key} 🔗` }, action_id: `gate2_merge_${idx}`, value: `${gateId}_${idx}` },
+          { type: 'button', text: { type: 'plain_text', text: 'Delete 🗑' }, style: 'danger', action_id: `gate2_delete_${idx}`, value: `${gateId}_${idx}` },
+        ],
+      },
+    ];
+  }
+
+  // Normal created ticket
+  return [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text:
+          `*${ticket.issue.key} created* ✅\n${ticket.issue.summary}\n` +
+          `<${issueUrlSafe(ticket.issue.key)}|View in Jira>`,
+      },
+    },
+    {
+      type: 'actions',
+      elements: [
+        { type: 'button', text: { type: 'plain_text', text: 'Approve ✅' }, style: 'primary', action_id: `gate2_approve_${idx}`, value: `${gateId}_${idx}` },
+        { type: 'button', text: { type: 'plain_text', text: 'Delete ticket 🗑' }, style: 'danger', action_id: `gate2_delete_${idx}`, value: `${gateId}_${idx}` },
+      ],
+    },
+  ];
+}
+
+function buildGate2Blocks(gateId, tickets) {
+  const created = tickets.filter((t) => t.status !== 'duplicate').length;
+  const blocks = [
+    { type: 'header', text: { type: 'plain_text', text: '🎫 Gate 2 — Review created tickets' } },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: `${created} tickets created · gate \`${gateId}\`` }] },
+    { type: 'divider' },
+  ];
+  tickets.forEach((t, idx) => {
+    blocks.push(...buildGate2TicketBlocks(gateId, t, idx));
+    blocks.push({ type: 'divider' });
+  });
+  blocks.push({
+    type: 'actions',
+    elements: [
+      { type: 'button', text: { type: 'plain_text', text: 'Approve all ✅' }, style: 'primary', action_id: 'gate2_approve_all', value: gateId },
+    ],
+  });
+  return blocks;
+}
+
+// issue URL without importing jira (avoid cycle): build from config
+function issueUrlSafe(key) {
+  const mock = config.demo.mockExternal || !config.jira.token || !config.jira.baseUrl;
+  const base = mock ? 'https://mock.atlassian.net' : config.jira.baseUrl;
+  return `${base}/browse/${key}`;
+}
+
 // ── console rendering for mock mode ──────────────────────────────────────
 function renderTasksToConsole(label, tasks) {
   const lines = [`\n🔔 [Slack mock] ${label} — ${tasks.length} tasks:`];
@@ -126,6 +220,49 @@ async function updateGate1(gateState) {
   });
 }
 
+function renderGate2ToConsole(tickets) {
+  const lines = ['\n🔔 [Slack mock] Gate 2 — ticket review:'];
+  tickets.forEach((t) => {
+    if (t.status === 'duplicate') {
+      lines.push(`   ℹ️ skipped (duplicate ${pct(t.score)}) "${t.issue.summary}" → ${t.issue.key}`);
+    } else if (t.status === 'created_with_warning') {
+      lines.push(
+        `   ⚠️ ${t.issue.key} created — possible dup (${pct(t.similarTo.score)}) vs ${t.similarTo.key}` +
+          '  [Keep separate ✅] [Merge 🔗] [Delete 🗑]'
+      );
+    } else {
+      lines.push(`   ✅ ${t.issue.key} created — ${t.issue.summary}`);
+    }
+  });
+  lines.push('   [Approve all ✅]   ← auto-approving for demo');
+  return lines.join('\n');
+}
+
+async function sendGate2(gateState) {
+  const blocks = buildGate2Blocks(gateState.gateId, gateState.tickets);
+  if (mockSlack) {
+    console.log(renderGate2ToConsole(gateState.tickets));
+    return { channel: config.slack.approvalChannel || 'mock-channel', ts: `mock-${gateState.gateId}` };
+  }
+  const created = gateState.tickets.filter((t) => t.status !== 'duplicate').length;
+  const res = await getClient().chat.postMessage({
+    channel: config.slack.approvalChannel,
+    text: `Gate 2 — review ${created} created tickets`,
+    blocks,
+  });
+  return { channel: res.channel, ts: res.ts };
+}
+
+async function updateGate2(gateState) {
+  if (mockSlack) return;
+  await getClient().chat.update({
+    channel: gateState.channelId,
+    ts: gateState.messageTs,
+    text: `Gate 2 — ${gateState.status}`,
+    blocks: buildGate2Blocks(gateState.gateId, gateState.tickets),
+  });
+}
+
 async function sendTimeoutNotice(channelId, gateId, reason = 'timeout') {
   const text = `⏰ Gate \`${gateId}\` auto-approved (${reason}).`;
   if (mockSlack) {
@@ -142,5 +279,8 @@ module.exports = {
   buildEditModal,
   sendGate1,
   updateGate1,
+  buildGate2Blocks,
+  sendGate2,
+  updateGate2,
   sendTimeoutNotice,
 };

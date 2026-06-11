@@ -102,6 +102,63 @@ function registerGate1Actions(app) {
   });
 }
 
+const gate2Key = (id) => `gate2:${id}`;
+
+// "<gateId>_<idx>" -> { gateId, idx }
+function parseGate2Value(value) {
+  const m = /^(.+)_(\d+)$/.exec(value || '');
+  if (!m) return null;
+  return { gateId: m[1], idx: Number(m[2]) };
+}
+
+/**
+ * Register Gate 2 handlers on a Bolt app instance.
+ * @param {import('@slack/bolt').App} app
+ */
+function registerGate2Actions(app) {
+  // Approve all remaining tickets
+  app.action('gate2_approve_all', async ({ ack, body, action }) => {
+    await ack();
+    const next = await store.update(gate2Key(action.value), {
+      status: 'approved',
+      approvedBy: body.user?.id || 'user',
+    });
+    if (next) await notifier.updateGate2(next);
+  });
+
+  // Per-ticket approve / keep-separate are no-ops on the list (kept as-is)
+  app.action(/^gate2_(approve|keep)_\d+$/, async ({ ack }) => {
+    await ack();
+  });
+
+  // Delete a ticket
+  app.action(/^gate2_delete_\d+$/, async ({ ack, action }) => {
+    await ack();
+    const parsed = parseGate2Value(action.value);
+    if (!parsed) return;
+    const state = await store.get(gate2Key(parsed.gateId));
+    if (!state) return;
+    const t = state.tickets[parsed.idx];
+    if (t && t.issue?.key) {
+      const jira = require('../jira/jira');
+      await jira.deleteIssue(t.issue.key);
+      t._removed = true;
+    }
+    await store.set(gate2Key(parsed.gateId), state);
+    await notifier.updateGate2(state);
+  });
+
+  // Merge new ticket into the existing similar one
+  app.action(/^gate2_merge_\d+$/, async ({ ack, action }) => {
+    await ack();
+    const parsed = parseGate2Value(action.value);
+    if (!parsed) return;
+    const { applyMerge } = require('../gates/gate2');
+    const state = await applyMerge(parsed.gateId, parsed.idx);
+    if (state) await notifier.updateGate2(state);
+  });
+}
+
 /**
  * Create a Bolt app (only used in real interactive mode). Returns null in mock
  * mode or when credentials are missing.
@@ -114,7 +171,8 @@ function createSlackApp() {
     signingSecret: config.slack.signingSecret,
   });
   registerGate1Actions(app);
+  registerGate2Actions(app);
   return app;
 }
 
-module.exports = { registerGate1Actions, createSlackApp };
+module.exports = { registerGate1Actions, registerGate2Actions, createSlackApp };
