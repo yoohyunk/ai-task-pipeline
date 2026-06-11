@@ -48,6 +48,15 @@ async function fetchMeetTranscript() {
   const record = (cr.data.conferenceRecords || [])[0];
   if (!record) return meetFixture;
 
+  // Watermark: skip a meeting already processed (same pattern as live Slack).
+  // ISO startTime compares lexicographically = chronologically.
+  const empty = { meeting: 'Google Meet', date: record.startTime, participants: [], transcript: [] };
+  if (config.demo.useWatermark) {
+    const watermark = require('../state/watermark');
+    const last = await watermark.get('meet');
+    if (last && record.startTime && record.startTime <= last) return empty;
+  }
+
   const tr = await axios.get(`${base}/${record.name}/transcripts`, { headers: h });
   const transcript = (tr.data.transcripts || [])[0];
   if (!transcript) return meetFixture;
@@ -77,6 +86,11 @@ async function fetchMeetTranscript() {
     lines.push({ speaker: await nameOf(e.participant), text: e.text.trim() });
   }
   if (!lines.length) return meetFixture;
+
+  // Advance the watermark only after we successfully read a new meeting.
+  if (config.demo.useWatermark) {
+    await require('../state/watermark').set('meet', record.startTime);
+  }
 
   return {
     meeting: 'Google Meet',
