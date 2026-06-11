@@ -140,7 +140,7 @@ Limited or simplified, stated plainly:
 
 ## Architecture
 
-The diagram (`plan/how_it_works_en.svg`) shows the full loop: ingest, extract,
+The diagram (`plan/how_it_works.svg`) shows the full loop: ingest, extract,
 Gate 1, dedup, Jira, Gate 2, assign, Gate 3, agent edit, PR, Gate 4, merge, with
 the three-layer memory feeding the agent. The core path through Gate 2 is the part
 I would point to first. The agent stage beyond it is implemented and was exercised

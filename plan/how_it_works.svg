@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 1140" font-family="-apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5f6368"/>
+    </marker>
+    <marker id="arrowloop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#a142f4"/>
+    </marker>
+  </defs>
+
+  <style>
+    .t   { font-size: 14px; fill: #202124; }
+    .h   { font-size: 15px; font-weight: 700; fill: #202124; }
+    .s   { font-size: 12px; fill: #5f6368; }
+    .tag { font-size: 11px; font-weight: 700; }
+    .lk  { stroke: #5f6368; stroke-width: 1.6; fill: none; }
+  </style>
+
+  <text x="40" y="34" class="h" font-size="22">AI Task Pipeline — how it works</text>
+  <text x="40" y="56" class="s">Conversations to tracked, reviewed work. A person approves at every gate. Built as a prototype on synthetic data.</text>
+
+  <!-- legend -->
+  <g transform="translate(620,18)">
+    <rect x="0" y="0" width="14" height="14" rx="3" fill="#f1f3f4" stroke="#9aa0a6"/><text x="20" y="11" class="s">source</text>
+    <rect x="0" y="22" width="14" height="14" rx="3" fill="#e8f0fe" stroke="#4285f4"/><text x="20" y="33" class="s">automated</text>
+    <rect x="180" y="0" width="14" height="14" rx="3" fill="#fff4e5" stroke="#f59e0b"/><text x="200" y="11" class="s">human gate (blocking)</text>
+    <rect x="180" y="22" width="14" height="14" rx="3" fill="#f3e8fd" stroke="#a142f4"/><text x="200" y="33" class="s">agent</text>
+  </g>
+
+  <!-- 1 Sources -->
+  <rect x="40" y="80" width="520" height="76" rx="8" fill="#f1f3f4" stroke="#9aa0a6"/>
+  <text x="56" y="104" class="h">1 · Sources</text>
+  <text x="56" y="126" class="t">Synthetic fixtures  OR  live Slack channel (history + thread replies, incremental by watermark)</text>
+  <text x="56" y="146" class="s">Slack threads   ·   meeting transcript   ·   calendar event</text>
+
+  <!-- 2 Ingest + chunk -->
+  <rect x="40" y="180" width="520" height="86" rx="8" fill="#e8f0fe" stroke="#4285f4"/>
+  <text x="56" y="204" class="h">2 · Ingest + source-specific chunking</text>
+  <text x="56" y="226" class="t">Slack: one chunk per thread (live: 30-min window for loose msgs)</text>
+  <text x="56" y="244" class="t">Meet: split on transition cues + ~800-token cap   ·   Calendar: one event = one chunk</text>
+  <text x="56" y="261" class="s">cross-link a calendar event with a meet transcript in the same time window</text>
+
+  <!-- 3 Extract -->
+  <rect x="40" y="290" width="520" height="58" rx="8" fill="#e8f0fe" stroke="#4285f4"/>
+  <text x="56" y="314" class="h">3 · Extract action items — Claude (forced tool use)</text>
+  <text x="56" y="335" class="s">whole-chunk judgment, implicit items included; no keyword pre-filter</text>
+
+  <!-- GATE 1 -->
+  <rect x="40" y="372" width="520" height="62" rx="8" fill="#fff4e5" stroke="#f59e0b" stroke-width="2"/>
+  <text x="56" y="396" class="h">🔑 Gate 1 · review the task list</text>
+  <text x="56" y="417" class="s">terminal / auto / Slack buttons + reply-in-thread to edit   ·   blocking, 24h timeout</text>
+
+  <!-- 4 Dedup -->
+  <rect x="40" y="458" width="520" height="90" rx="8" fill="#e8f0fe" stroke="#4285f4"/>
+  <text x="56" y="482" class="h">4 · Dedup (two layers)</text>
+  <text x="56" y="504" class="t">L1 JQL keyword search (narrow)  →  L2 Gemini embedding cosine</text>
+  <text x="56" y="523" class="t">≥0.90 duplicate (skip) · 0.85–0.90 flag for Gate 2 · &lt;0.85 create</text>
+  <text x="56" y="541" class="s">embeddings cached in Redis · Gemini not Claude (Claude has no embedding model)</text>
+
+  <!-- 5 Jira + PRD -->
+  <rect x="40" y="572" width="520" height="58" rx="8" fill="#e8f0fe" stroke="#4285f4"/>
+  <text x="56" y="596" class="h">5 · Create Jira ticket + codebase-grounded PRD</text>
+  <text x="56" y="617" class="s">reads the target file first; PRD = background / problem / requirements / acceptance</text>
+
+  <!-- GATE 2 -->
+  <rect x="40" y="654" width="520" height="62" rx="8" fill="#fff4e5" stroke="#f59e0b" stroke-width="2"/>
+  <text x="56" y="678" class="h">🔑 Gate 2 · review tickets</text>
+  <text x="56" y="699" class="s">similarity warning + merge · reply-in-thread to edit the PRD · blocking, 4h timeout</text>
+
+  <!-- 6 Assign + Gate 3 -->
+  <rect x="40" y="740" width="520" height="58" rx="8" fill="#e8f0fe" stroke="#4285f4"/>
+  <text x="56" y="764" class="h">6 · Assign (rule-based)  ·  🔑 Gate 3 assignment review</text>
+  <text x="56" y="785" class="s">Gate 3 auto-skips when confidence is high; otherwise prompts</text>
+
+  <!-- 7 Agent -->
+  <rect x="40" y="822" width="520" height="86" rx="8" fill="#f3e8fd" stroke="#a142f4"/>
+  <text x="56" y="846" class="h">7 · Agent edits code → opens a real PR</text>
+  <text x="56" y="868" class="t">parallel, each in an isolated git worktree</text>
+  <text x="56" y="886" class="t">symbolic canned diff  OR  live (Claude rewrites the file)  →  GitHub PR via gh</text>
+
+  <!-- GATE 4 -->
+  <rect x="40" y="932" width="520" height="92" rx="8" fill="#fff4e5" stroke="#f59e0b" stroke-width="2"/>
+  <text x="56" y="956" class="h">🔑 Gate 4 · review the PR  →  rework loop</text>
+  <text x="56" y="978" class="t">request changes → agent revises on the same branch → re-review (max 3 cycles)</text>
+  <text x="56" y="997" class="t">approve → real merge → Jira transitions to Done</text>
+  <text x="56" y="1015" class="s">cli: type feedback · slack: reply in thread</text>
+
+  <!-- main flow arrows -->
+  <line x1="300" y1="156" x2="300" y2="180" class="lk" marker-end="url(#arrow)"/>
+  <line x1="300" y1="266" x2="300" y2="290" class="lk" marker-end="url(#arrow)"/>
+  <line x1="300" y1="348" x2="300" y2="372" class="lk" marker-end="url(#arrow)"/>
+  <line x1="300" y1="434" x2="300" y2="458" class="lk" marker-end="url(#arrow)"/>
+  <line x1="300" y1="548" x2="300" y2="572" class="lk" marker-end="url(#arrow)"/>
+  <line x1="300" y1="630" x2="300" y2="654" class="lk" marker-end="url(#arrow)"/>
+  <line x1="300" y1="716" x2="300" y2="740" class="lk" marker-end="url(#arrow)"/>
+  <line x1="300" y1="798" x2="300" y2="822" class="lk" marker-end="url(#arrow)"/>
+  <line x1="300" y1="908" x2="300" y2="932" class="lk" marker-end="url(#arrow)"/>
+
+  <!-- rework loop arrow: Gate 4 back to Agent -->
+  <path d="M40 978 C 8 978, 8 866, 40 866" stroke="#a142f4" stroke-width="1.8" fill="none" marker-end="url(#arrowloop)"/>
+  <text x="14" y="924" class="tag" fill="#a142f4" transform="rotate(-90 14 924)">rework</text>
+
+  <!-- Memory panel -->
+  <rect x="600" y="740" width="340" height="186" rx="8" fill="#e6f4ea" stroke="#34a853"/>
+  <text x="616" y="764" class="h">3-layer agent memory</text>
+  <text x="616" y="787" class="t">L1 · fixed project context</text>
+  <text x="616" y="809" class="t">L2 · cross-task lessons (Gemini embed +</text>
+  <text x="632" y="826" class="t">retrieve top-k; saved after Done)</text>
+  <text x="616" y="848" class="t">L3 · in-task rework log (injected into each</text>
+  <text x="632" y="865" class="t">revision; compressed when long)</text>
+  <text x="616" y="900" class="s">feeds the agent's prompt at step 7</text>
+  <line x1="600" y1="860" x2="560" y2="862" class="lk" stroke="#34a853" marker-end="url(#arrow)"/>
+
+  <!-- footer note -->
+  <rect x="600" y="80" width="340" height="120" rx="8" fill="#fafafa" stroke="#dadce0"/>
+  <text x="616" y="104" class="h" font-size="14">Runs offline</text>
+  <text x="616" y="126" class="s">Every external service (Claude, Gemini,</text>
+  <text x="616" y="142" class="s">Jira, Slack, GitHub) has a mock fallback,</text>
+  <text x="616" y="158" class="s">so the full pipeline runs with no keys.</text>
+  <text x="616" y="182" class="s">A scheduled daemon reads only new</text>
+  <text x="616" y="198" class="s">messages, business hours only.</text>
+
+  <text x="40" y="1058" class="s">Stack: Node.js · Anthropic SDK (claude-sonnet-4-6) · Google GenAI (gemini-embedding-001) · Slack Bolt (Socket Mode) · Jira REST v3 · gh · Redis</text>
+</svg>
