@@ -172,7 +172,4 @@ For my own reconciliation across the diagram, a resume line, and this write-up:
    not a calibrated score) and reads a real Jira workload signal (open-issue
    count). Skill-tag matching is not built; the thresholds are placeholders for a
    calibrated model.
-6. `plan/claude-code-session-prompt.md` still contains the string "Orbit Sales" (in
-   an instruction to remove it). If the repo is shared with reviewers, scrub that
-   file so there is no client reference anywhere.
-7. The package name is `task-pipeline`; the working directory is `ai-task-manager`.
+6. The package name is `task-pipeline`; the working directory is `ai-task-manager`.

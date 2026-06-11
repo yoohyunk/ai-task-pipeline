@@ -8,13 +8,11 @@ of truth EXCEPT for the changes below.
 1. SKIP the entire "Git commit history" section. Do NOT backdate commits. Commit
    normally with real dates as you build.
 
-2. Decouple from Orbit Sales completely — this is a standalone project:
-   - Repo/dir name: task-pipeline (not orbit-task-pipeline)
-   - Jira project key: generic placeholder via env (e.g. TASK), never ORBIT
-   - Do NOT reference or deploy to Orbit's EC2/ALB. Assume a generic local/dev
-     environment. Drop the ALB routing assumptions.
-   - In Memory Layer 1 and all examples, replace "Orbit Sales", "orbit-shop-app",
-     "orbit-woo-app", "ORBIT-142-woo-webhook" with neutral generic examples.
+2. Standalone, generic project — no client references anywhere:
+   - Repo/dir name: task-pipeline
+   - Jira project key: generic placeholder via env (e.g. TASK)
+   - No specific cloud/deploy assumptions. Assume a generic local/dev environment.
+   - In Memory Layer 1 and all examples, use neutral generic names only.
 
 3. Model string override:
    - CLAUDE.md says `claude-sonnet-4-5` — this is outdated.
