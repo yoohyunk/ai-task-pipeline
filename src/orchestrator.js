@@ -10,7 +10,7 @@ const { assignAgent } = require('./agent/assign');
 const { runGate3 } = require('./gates/gate3');
 const { executeTask, canHandle } = require('./agent/executor');
 const { generateSummary } = require('./agent/summarizer');
-const { createPR } = require('./github/pr');
+const { createPR, mergePR } = require('./github/pr');
 const { runGate4 } = require('./gates/gate4');
 const jira = require('./jira/jira');
 
@@ -77,50 +77,51 @@ async function run() {
   const confirmedTickets = await runGate2(dedupResults);
   ui.ok(`${confirmedTickets.length} tickets confirmed`);
 
-  // ── Steps 4–10: agent → PR → Gate 4 ──────────────────────────────
+  // ── Steps 4–10: agent → PR → Gate 4, run per ticket IN PARALLEL ──────
+  // Each ticket works in its own git worktree, so they don't conflict. Gate 4
+  // messages all post at once; approve each in Slack and they merge independently.
   const actionable = confirmedTickets.filter((r) => canHandle(r.issue.summary));
   const chosen = (actionable.length ? actionable : confirmedTickets).slice(0, config.agent.taskLimit);
-  ui.step('4', `Agent works ${chosen.length} ticket(s)  ${ui.dim(`(mode=${config.agent.mode})`)}`);
+  ui.step('4', `Agent works ${chosen.length} ticket(s) in parallel  ${ui.dim(`(mode=${config.agent.mode})`)}`);
 
-  const prs = [];
-  for (const result of chosen) {
+  async function processTicket(result) {
     const ticket = toTicket(result);
+    try {
+      const assignment = await assignAgent(ticket);
+      ui.agent(`${ticket.key}  assign → ${assignment.assignee}`);
+      await runGate3(ticket, assignment);
 
-    const assignment = await assignAgent(ticket);
-    ui.agent(`${ticket.key}  assign → ${assignment.assignee}  ${ui.dim(`(confidence ${assignment.confidence})`)}`);
+      await jira.transitionIssue(ticket.key, 'In Progress');
+      const work = await executeTask(ticket, assignment);
+      ui.agent(`${ticket.key}  edited ${work.changedFiles.join(', ')}`);
 
-    await runGate3(ticket, assignment);
+      const summary = await generateSummary(ticket, work.changedFiles, work.diffSummary, work.log);
+      const pr = await createPR({
+        branch: work.branch,
+        ticket,
+        summary,
+        testResults: 'not run (demo)',
+        changedFiles: work.changedFiles,
+      });
+      await jira.transitionIssue(ticket.key, 'In Review');
+      ui.agent(`${ticket.key}  PR → ${pr.prUrl}  · In Review`);
 
-    await jira.transitionIssue(ticket.key, 'In Progress');
-    const work = await executeTask(ticket, assignment);
-    ui.agent(`${ticket.key}  In Progress · edited ${work.changedFiles.join(', ')}`);
-
-    const summary = await generateSummary(ticket, work.changedFiles, work.diffSummary, work.log);
-
-    const pr = await createPR({
-      branch: work.branch,
-      ticket,
-      summary,
-      testResults: 'not run (demo)',
-      changedFiles: work.changedFiles,
-    });
-    ui.agent(`${ticket.key}  PR → ${pr.prUrl}`);
-    prs.push(pr);
-
-    // PR is up for review → move ticket to In Review.
-    await jira.transitionIssue(ticket.key, 'In Review');
-    ui.agent(`${ticket.key}  → In Review`);
-
-    ui.gate('Gate 4 · review agent PR');
-    const decision = await runGate4(ticket, pr, summary, assignment);
-
-    if (decision === 'approved') {
-      await jira.transitionIssue(ticket.key, 'Done');
-      ui.ok(`${ticket.key} approved → merged → Jira Done`);
-    } else {
-      ui.note(`${ticket.key} ${decision}`);
+      const decision = await runGate4(ticket, pr, summary, assignment);
+      if (decision === 'approved') {
+        await mergePR(pr.prNumber);
+        await jira.transitionIssue(ticket.key, 'Done');
+        ui.ok(`${ticket.key} approved → PR merged → Jira Done`);
+      } else {
+        ui.note(`${ticket.key} ${decision} (PR left open)`);
+      }
+      return pr;
+    } catch (err) {
+      ui.note(`${ticket.key} failed: ${err.message}`);
+      return null;
     }
   }
+
+  const prs = (await Promise.all(chosen.map(processTicket))).filter(Boolean);
 
   return { packets, allTasks, approvedTasks, dedupResults, confirmedTickets, prs };
 }

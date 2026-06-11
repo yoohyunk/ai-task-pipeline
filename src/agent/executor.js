@@ -136,16 +136,25 @@ async function executeTask(ticket, assignment) {
 
   const changedFiles = [file];
 
-  // Only touch git/files when a real PR will be opened.
+  // Only touch git/files when a real PR will be opened. Work in an isolated
+  // git worktree so multiple agents can run in parallel without stomping the
+  // main working dir or each other.
   if (config.agent.createRealPr) {
     const suffix = String(Date.now()).slice(-4);
     const realBranch = `${branch}-${suffix}`;
-    git('checkout -q main');
-    git(`checkout -q -b ${realBranch}`);
-    fs.writeFileSync(path.join(REPO_ROOT, file), newContent);
-    git(`add ${file}`);
-    git(`commit -q -m "[${ticket.key}] ${ticket.title}\n\n${diffSummary}\n\nThis change was made by an AI agent."`);
-    log.push(`Committed ${file} on branch ${realBranch}`);
+    const wtPath = path.join(REPO_ROOT, '.worktrees', realBranch.replace(/[^\w-]/g, '_'));
+    const msg = `[${ticket.key}] ${ticket.title}\n\n${diffSummary}\n\nThis change was made by an AI agent.`;
+
+    git(`worktree add -q -b ${realBranch} "${wtPath}" main`);
+    try {
+      fs.writeFileSync(path.join(wtPath, file), newContent);
+      execSync(`git add ${file}`, { cwd: wtPath });
+      execSync(`git commit -q -m ${JSON.stringify(msg)}`, { cwd: wtPath });
+      execSync(`git push -q -u origin ${realBranch}`, { cwd: wtPath });
+    } finally {
+      git(`worktree remove --force "${wtPath}"`);
+    }
+    log.push(`Committed ${file} on ${realBranch} (isolated worktree)`);
     return { branch: realBranch, changedFiles, diffSummary, newContent, log, applied: true };
   }
 

@@ -50,20 +50,31 @@ async function createPR({ branch, ticket, summary, testResults, changedFiles = [
     return { prNumber: null, prUrl: `https://github.com/mock/pull/0 (mock)`, branch, changedFiles };
   }
 
-  // Real PR via gh.
-  git(`push -q -u origin ${branch}`);
-  let prUrl;
-  try {
-    prUrl = execSync(
-      `gh pr create --base main --head ${branch} --title ${JSON.stringify(title)} --body ${JSON.stringify(body)}`,
-      { cwd: REPO_ROOT, encoding: 'utf8' }
-    ).trim().split('\n').pop();
-  } finally {
-    // Restore the working tree to main regardless of outcome.
-    git('checkout -q main');
-  }
+  // Real PR via gh. The branch was already pushed from the agent's worktree,
+  // and the main working dir was never switched, so just open the PR.
+  const prUrl = execSync(
+    `gh pr create --base main --head ${branch} --title ${JSON.stringify(title)} --body ${JSON.stringify(body)}`,
+    { cwd: REPO_ROOT, encoding: 'utf8' }
+  ).trim().split('\n').pop();
   const prNumber = Number((prUrl.match(/\/pull\/(\d+)/) || [])[1]) || null;
   return { prNumber, prUrl, branch, changedFiles };
 }
 
-module.exports = { createPR, buildBody };
+/**
+ * Actually merge a PR (and delete its branch). Used when Gate 4 is approved.
+ * @param {number} prNumber
+ * @returns {Promise<boolean>} true if a real merge happened
+ */
+async function mergePR(prNumber) {
+  if (!config.agent.createRealPr || !prNumber) {
+    console.log(`   [PR mock] would merge & delete branch for #${prNumber || '0'}`);
+    return false;
+  }
+  execSync(`gh pr merge ${prNumber} --merge --delete-branch`, {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+  });
+  return true;
+}
+
+module.exports = { createPR, mergePR, buildBody };
