@@ -33,8 +33,10 @@ const config = {
   },
 };
 
-// fail fast if critical keys are missing
-const required = ['ANTHROPIC_API_KEY'];
+// fail fast if critical keys are missing.
+// In mock mode (MOCK_EXTERNAL=true, the default) the pipeline runs offline,
+// so no real keys are required. Set MOCK_EXTERNAL=false to require live keys.
+const required = config.demo.mockExternal ? [] : ['ANTHROPIC_API_KEY'];
 for (const key of required) {
   if (!process.env[key]) throw new Error(`Missing required env var: ${key}`);
 }
