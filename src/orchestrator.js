@@ -29,8 +29,17 @@ function toTicket(result) {
 async function run() {
   // ── Step 1: Ingest ──────────────────────────────────────────────
   ui.step('1', 'Ingest data sources');
+  const srcLabel =
+    config.demo.ingestSource === 'slack'
+      ? `LIVE Slack channel ${config.slack.ingestChannel}`
+      : 'FIXTURES (synthetic JSON in fixtures/)';
+  ui.detail(`ingest source: ${srcLabel}`);
+  if (config.demo.ingestSource !== 'slack') {
+    ui.note('(set INGEST_SOURCE=slack to read your real Slack channel instead)');
+  }
   const packets = await ingest();
-  ui.detail(`${packets.length} context packets built from Slack / Meet / calendar`);
+  const channels = [...new Set(packets.map((p) => `${p.source}:${p.channel}`))];
+  ui.detail(`${packets.length} context packets from → ${channels.join(', ')}`);
 
   // ── Step 2: Extract ─────────────────────────────────────────────
   ui.step('2', 'Extract action items with Claude');
@@ -39,6 +48,13 @@ async function run() {
     allTasks.push(...(await extractWithRetry(packet)));
   }
   ui.detail(`${allTasks.length} tasks extracted`);
+  // Show where each task came from (provenance).
+  const byChannel = {};
+  for (const t of allTasks) {
+    const k = `${t.source}:${t.sourceChannel}`;
+    byChannel[k] = (byChannel[k] || 0) + 1;
+  }
+  for (const [k, n] of Object.entries(byChannel)) ui.note(`${n} from ${k}`);
 
   // ── Gate 1 ──────────────────────────────────────────────────────
   ui.gate('Gate 1 · review extracted tasks');

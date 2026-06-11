@@ -63,6 +63,8 @@ async function extract(packet) {
     ...t,
     source: t.source || packet.source,
     chunkId: packet.chunkId,
+    sourceChannel: packet.channel,
+    sourceTime: packet.timestamp,
   }));
 }
 

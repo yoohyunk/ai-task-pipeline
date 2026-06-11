@@ -58,8 +58,9 @@ function printTasks(tasks) {
   console.log('');
   tasks.forEach((t, i) => {
     const n = String(i + 1).padStart(2, ' ');
+    const origin = t.sourceChannel ? `${t.source}:${t.sourceChannel}` : t.source;
     console.log(`   ${ui.bold(n)}. ${t.title}`);
-    console.log(ui.dim(`       ${t.priority} · ${t.assignee_hint || 'TBD'} · ${t.source}`));
+    console.log(ui.dim(`       ${t.priority} · ${t.assignee_hint || 'TBD'} · from ${origin}`));
   });
   console.log('');
 }
