@@ -8,42 +8,48 @@
 const readline = require('readline/promises');
 const { stdin, stdout } = require('process');
 
-// Open one readline interface per gate session. Recreating it per question
-// drops buffered piped input, so each gate function creates a single `ask`.
-function makeAsker() {
-  const rl = readline.createInterface({ input: stdin, output: stdout });
-  let closed = false;
-  rl.on('close', () => {
-    closed = true;
-  });
-  const ask = (question) => {
-    if (closed) return Promise.resolve('');
-    // Race the answer against stream close — readline/promises does not settle
-    // question() on EOF, which would otherwise hang (or silently drain) the loop.
-    return new Promise((resolve) => {
-      let done = false;
-      const finish = (v) => {
-        if (done) return;
-        done = true;
-        resolve(typeof v === 'string' ? v.trim() : '');
-      };
-      rl.question(question).then(finish).catch(() => finish(''));
-      rl.once('close', () => finish(''));
+// One shared readline interface for the whole process. Recreating it per gate
+// discards readline's read-ahead buffer (losing piped lines) and a fresh
+// interface never settles after stdin EOF — both hang the demo. So we open it
+// once, reuse it across all gates, and close it explicitly via closeCli().
+let sharedRl = null;
+let stdinEnded = false;
+stdin.on('end', () => {
+  stdinEnded = true;
+});
+
+function getRl() {
+  if (!sharedRl) {
+    sharedRl = readline.createInterface({ input: stdin, output: stdout });
+    sharedRl.on('close', () => {
+      stdinEnded = true;
     });
-  };
-  ask.close = () => {
-    if (!closed) rl.close();
-  };
-  return ask;
+  }
+  return sharedRl;
 }
 
-// Standalone single prompt (used by Gate 4).
-async function prompt(question) {
-  const ask = makeAsker();
-  try {
-    return await ask(question);
-  } finally {
-    ask.close();
+// Ask one question. Resolves '' on EOF / closed stdin so the demo never hangs.
+function prompt(question) {
+  if (stdinEnded) return Promise.resolve('');
+  const rl = getRl();
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => {
+      if (done) return;
+      done = true;
+      resolve(typeof v === 'string' ? v.trim() : '');
+    };
+    rl.question(question).then(finish).catch(() => finish(''));
+    rl.once('close', () => finish(''));
+    stdin.once('end', () => finish(''));
+  });
+}
+
+// Close the shared interface so the process can exit. Idempotent.
+function closeCli() {
+  if (sharedRl) {
+    sharedRl.close();
+    sharedRl = null;
   }
 }
 
@@ -63,42 +69,37 @@ function printTasks(tasks) {
  */
 async function askGate1(tasks) {
   let list = [...tasks];
-  const ask = makeAsker();
   console.log('\n🔑 Gate 1 — review extracted tasks:');
-  try {
-    for (;;) {
-      printTasks(list);
-      const cmd = await ask(
-        '   > [enter]=approve all · r=reject · rm N=remove · e N=edit title : '
-      );
-      if (cmd === '' || cmd === 'a' || cmd === 'approve') {
-        return { decision: 'approved', tasks: list };
-      }
-      if (cmd === 'r' || cmd === 'reject') {
-        return { decision: 'rejected', tasks: list };
-      }
-      const rm = /^(?:rm|remove)\s+(\d+)$/.exec(cmd);
-      if (rm) {
-        const idx = Number(rm[1]) - 1;
-        if (idx >= 0 && idx < list.length) {
-          console.log(`   🗑 removed: ${list[idx].title}`);
-          list = list.filter((_, i) => i !== idx);
-        }
-        continue;
-      }
-      const ed = /^(?:e|edit)\s+(\d+)$/.exec(cmd);
-      if (ed) {
-        const idx = Number(ed[1]) - 1;
-        if (idx >= 0 && idx < list.length) {
-          const nt = await ask(`   new title for "${list[idx].title}": `);
-          if (nt) list[idx] = { ...list[idx], title: nt };
-        }
-        continue;
-      }
-      console.log('   (unrecognized — try again)');
+  for (;;) {
+    printTasks(list);
+    const cmd = await prompt(
+      '   > [enter]=approve all · r=reject · rm N=remove · e N=edit title : '
+    );
+    if (cmd === '' || cmd === 'a' || cmd === 'approve') {
+      return { decision: 'approved', tasks: list };
     }
-  } finally {
-    ask.close();
+    if (cmd === 'r' || cmd === 'reject') {
+      return { decision: 'rejected', tasks: list };
+    }
+    const rm = /^(?:rm|remove)\s+(\d+)$/.exec(cmd);
+    if (rm) {
+      const idx = Number(rm[1]) - 1;
+      if (idx >= 0 && idx < list.length) {
+        console.log(`   🗑 removed: ${list[idx].title}`);
+        list = list.filter((_, i) => i !== idx);
+      }
+      continue;
+    }
+    const ed = /^(?:e|edit)\s+(\d+)$/.exec(cmd);
+    if (ed) {
+      const idx = Number(ed[1]) - 1;
+      if (idx >= 0 && idx < list.length) {
+        const nt = await prompt(`   new title for "${list[idx].title}": `);
+        if (nt) list[idx] = { ...list[idx], title: nt };
+      }
+      continue;
+    }
+    console.log('   (unrecognized — try again)');
   }
 }
 
@@ -112,37 +113,32 @@ async function askGate1(tasks) {
  * @returns {Promise<object[]>} confirmed tickets
  */
 async function askGate2(tickets, onMerge, onDelete) {
-  const ask = makeAsker();
   console.log('\n🔑 Gate 2 — review created tickets:');
-  try {
-    for (;;) {
-      tickets.forEach((t, i) => {
-        if (t.status === 'duplicate') {
-          console.log(`   ${i + 1}. ℹ️ skipped (dup) ${t.issue.key} — ${t.issue.summary}`);
-        } else if (t._removed) {
-          console.log(`   ${i + 1}. ⊘ ${t.issue.key} (${t._mergedInto ? 'merged → ' + t._mergedInto : 'deleted'})`);
-        } else if (t.status === 'created_with_warning') {
-          console.log(`   ${i + 1}. ⚠️ ${t.issue.key} — ${t.issue.summary} (possible dup of ${t.similarTo.key})`);
-        } else {
-          console.log(`   ${i + 1}. ✅ ${t.issue.key} — ${t.issue.summary}`);
-        }
-      });
-      const cmd = await ask('   > [enter]=approve all · d N=delete · m N=merge : ');
-      if (cmd === '' || cmd === 'a' || cmd === 'approve') break;
-      const del = /^d(?:elete)?\s+(\d+)$/.exec(cmd);
-      if (del) {
-        await onDelete(Number(del[1]) - 1);
-        continue;
+  for (;;) {
+    tickets.forEach((t, i) => {
+      if (t.status === 'duplicate') {
+        console.log(`   ${i + 1}. ℹ️ skipped (dup) ${t.issue.key} — ${t.issue.summary}`);
+      } else if (t._removed) {
+        console.log(`   ${i + 1}. ⊘ ${t.issue.key} (${t._mergedInto ? 'merged → ' + t._mergedInto : 'deleted'})`);
+      } else if (t.status === 'created_with_warning') {
+        console.log(`   ${i + 1}. ⚠️ ${t.issue.key} — ${t.issue.summary} (possible dup of ${t.similarTo.key})`);
+      } else {
+        console.log(`   ${i + 1}. ✅ ${t.issue.key} — ${t.issue.summary}`);
       }
-      const mg = /^m(?:erge)?\s+(\d+)$/.exec(cmd);
-      if (mg) {
-        await onMerge(Number(mg[1]) - 1);
-        continue;
-      }
-      console.log('   (unrecognized — try again)');
+    });
+    const cmd = await prompt('   > [enter]=approve all · d N=delete · m N=merge : ');
+    if (cmd === '' || cmd === 'a' || cmd === 'approve') break;
+    const del = /^d(?:elete)?\s+(\d+)$/.exec(cmd);
+    if (del) {
+      await onDelete(Number(del[1]) - 1);
+      continue;
     }
-  } finally {
-    ask.close();
+    const mg = /^m(?:erge)?\s+(\d+)$/.exec(cmd);
+    if (mg) {
+      await onMerge(Number(mg[1]) - 1);
+      continue;
+    }
+    console.log('   (unrecognized — try again)');
   }
   return tickets.filter((t) => t.status !== 'duplicate' && !t._removed);
 }
@@ -165,4 +161,4 @@ async function askGate4(ticket, pr, summary) {
   return cmd === 'r' || cmd === 'reject' ? 'rejected' : 'approved';
 }
 
-module.exports = { askGate1, askGate2, askGate4, prompt };
+module.exports = { askGate1, askGate2, askGate4, prompt, closeCli };

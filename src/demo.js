@@ -22,9 +22,11 @@ run()
       result.prs.forEach((p) => console.log(`              ${p.prUrl}`));
     }
     await store.close();
+    try { require('./gates/cli').closeCli(); } catch { /* not in cli mode */ }
   })
   .catch(async (err) => {
     console.error('\n❌  Pipeline error:', err.message);
     await store.close();
+    try { require('./gates/cli').closeCli(); } catch { /* not in cli mode */ }
     process.exit(1);
   });
