@@ -1,136 +1,169 @@
 # AI Task Pipeline
 
-Ingest team conversations (Slack, Meet, calendar), extract action items with
-Claude, run them through human approval gates, dedup against existing work, and
-create Jira tickets — end to end.
+An **AI PM agent** that turns team conversations into tracked, reviewed work —
+and closes the loop on the simple ones. It listens to your team (Slack / Meet /
+calendar), drafts the tickets, dedups and assigns them, writes a codebase-grounded
+PRD, then has an agent implement the easy ones and open a PR — with a human
+approval gate at every step.
 
 ```
-ingest (fixtures | live Slack) → extract (Claude) → Gate 1 (review)
-   → dedup (Gemini) → Jira create → Gate 2 (review)
-   → assign → Gate 3 → agent edits demo-app → GitHub PR → Gate 4 (review) → Jira Done
+ingest (fixtures | live Slack) → extract (Claude) → Gate 1 · task review
+   → dedup (Gemini) → Jira ticket + PRD → Gate 2 · ticket review
+   → assign → Gate 3 → agent edits code (worktree) → GitHub PR → Gate 4 · PR review → merge → Jira Done
 ```
 
-Gates run in the terminal (`cli`), auto-approve (`auto`), or as interactive
-Slack buttons (`slack`, via Socket Mode — no ngrok).
+**Supervised autonomy** — four human gates (terminal, or interactive Slack
+buttons + thread editing). Nothing ships without a click.
 
-## Quick start
+---
+
+## What it does
+
+- **Ingest** — synthetic fixtures, or **live Slack** (`conversations.history`, real names, threads)
+- **Extract** — Claude forced tool use → action items (explicit *and* implicit)
+- **Gate 1** — review the task list; in Slack, **edit it by replying in the thread** ("remove #3", "assign to bob")
+- **Dedup** — JQL + Gemini embedding similarity (created / possible-dup / duplicate)
+- **Jira** — create tickets with a **codebase-grounded PRD** (background / problem / requirements / acceptance criteria), set priority + assignee, transition status
+- **Gate 2** — review tickets; **edit the PRD by replying in the thread** ("add a PagerDuty requirement to KAN-28")
+- **Agent** — for actionable tickets, edit the target code in an **isolated git worktree** (symbolic diff, or Claude-written), open a **real GitHub PR**, run multiple tickets **in parallel**
+- **Gate 4** — review the PR; approve → **real merge** → Jira **Done**
+- **Scheduled daemon** — read only new messages (watermark), business hours, overnight batched in the morning
+
+## Quick start (offline, no keys)
 
 ```bash
 npm install
-cp .env.example .env      # fill in ANTHROPIC_API_KEY (+ optional Gemini/Jira/Slack/Redis)
+cp .env.example .env        # nothing required in mock mode
 npm run demo
 ```
 
-The demo runs the full core path on synthetic fixtures. With `MOCK_EXTERNAL=true`
-(default) and `GATE_AUTO_APPROVE=true` (default) it runs offline end-to-end —
-only `ANTHROPIC_API_KEY` is strictly required. Provide real keys to hit live
-Slack / Jira / Gemini.
+Runs the whole flow on synthetic fixtures with `MOCK_EXTERNAL=true` (default) —
+no real Slack/Jira/GitHub calls, gates in the terminal.
 
 ## Run modes
 
 ```bash
 npm run demo        # interactive terminal gates (GATE_MODE=cli)
-npm run demo:auto   # hands-off, gates auto-approve (good for a quick run / CI)
-npm run demo:slack  # live: read real Slack, real services, Slack button gates
+npm run demo:auto   # hands-off, gates auto-approve (quick run / CI)
+npm run demo:slack  # live: real Slack ingest + services + Slack button gates
+npm run watch       # scheduled daemon (incremental, business hours)
+npm run reset:demo  # restore demo-app/ to baseline between real-merge runs
 ```
 
-## Real end-to-end usage (live Slack → Jira → GitHub PR)
+---
 
-Runs against your actual Slack channel, real Claude/Gemini/Jira, interactive
-Slack buttons, and opens a real GitHub PR.
+## Live end-to-end (real Slack → Jira → GitHub PR)
 
-**One-time setup**
+### 1. Keys (`.env`)
 
-1. `.env` — fill `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `JIRA_BASE_URL/EMAIL/API_TOKEN`,
-   `JIRA_PROJECT_KEY` (your project key, e.g. `KAN`), `SLACK_BOT_TOKEN`,
-   `SLACK_APPROVAL_CHANNEL`.
-2. Slack app (api.slack.com/apps):
-   - Invite the bot to the channel: `/invite @your-bot`
-   - Bot scopes: `chat:write`, `channels:history`, `channels:read`, `users:read`
-   - **Socket Mode** ON → create App-Level Token (`xapp-…`, scope `connections:write`)
-     → add as `SLACK_APP_TOKEN` in `.env`; turn **Interactivity** ON
-3. `gh auth login` so the agent can open PRs in this repo.
+```
+ANTHROPIC_API_KEY=        # Claude — extraction, PRD, agent, conversational edits
+GEMINI_API_KEY=           # embedding dedup (free at aistudio.google.com)
+JIRA_BASE_URL=            # https://your-site.atlassian.net
+JIRA_EMAIL=
+JIRA_API_TOKEN=           # id.atlassian.com/manage-profile/security/api-tokens
+JIRA_PROJECT_KEY=         # your project key, e.g. KAN
+SLACK_BOT_TOKEN=          # xoxb-…
+SLACK_APP_TOKEN=          # xapp-…  (Socket Mode)
+SLACK_APPROVAL_CHANNEL=   # channel ID, e.g. C0…
+SLACK_INGEST_CHANNEL=     # optional — defaults to the approval channel
+REDIS_URL=                # optional — defaults to redis://localhost:6379
+```
 
-**Run**
+Each service goes live only if its own key is present (set `MOCK_EXTERNAL=false`);
+anything missing falls back to mock. So you can enable one service at a time.
+
+### 2. Slack app (api.slack.com/apps)
+
+- **Invite the bot** to the channel: `/invite @your-bot`
+- **OAuth → Bot Token Scopes**: `chat:write`, `channels:history`, `channels:read`, `users:read`, `reactions:write`
+- **Socket Mode**: ON → create App-Level Token (`xapp-…`, scope `connections:write`) → `SLACK_APP_TOKEN`
+- **Interactivity**: ON (no Request URL needed with Socket Mode)
+- **Event Subscriptions**: ON → subscribe to bot event **`message.channels`** (enables thread-reply editing)
+
+### 3. GitHub
 
 ```bash
-# 1. Post your team conversation into the ingest channel
-#    (defaults to SLACK_APPROVAL_CHANNEL; set SLACK_INGEST_CHANNEL for a separate one)
-# 2. Run live, opening real PRs for up to 2 tickets:
+gh auth login              # so the agent can open/merge PRs in this repo
+```
+
+### 4. Run
+
+```bash
+# post your team conversation into the ingest channel, then:
 CREATE_REAL_PR=true AGENT_TASK_LIMIT=2 npm run demo:slack
 ```
 
-Then in Slack: click **Approve all** on Gate 1 and Gate 2, and **Approve & merge**
-on each Gate 4 (agent PR) message. Buttons only respond while the process is
-running. The terminal shows the active ingest source so you can confirm it's
-reading live Slack (`ingest source: LIVE Slack channel …`).
+A single **run thread** appears in Slack; Gate 1 / 2 / 4 post as replies under it.
+- **Gate 1/2**: click `Approve all`, or reply in the thread to edit (tasks / PRDs)
+- **Gate 4**: click `Approve & merge` → the PR merges and the ticket moves to Done
 
-Flags you can mix: `INGEST_SOURCE=slack|fixtures`, `GATE_MODE=cli|auto|slack`,
-`CREATE_REAL_PR=true|false`, `AGENT_MODE=symbolic|live`, `AGENT_TASK_LIMIT=N`,
-`MOCK_EXTERNAL=true|false`.
+> Real merges change `demo-app/` on `main`. Run `npm run reset:demo` before the
+> next demo to restore the baseline (so symbolic edits produce real diffs again).
 
-## Environment
+---
 
-See `.env.example`. With the defaults (`MOCK_EXTERNAL=true`) nothing is required
-and the demo runs fully offline. Everything falls back to mock mode when missing.
-
-## Switching from mock to live
-
-The pipeline ships in mock mode so it runs with no keys. To hit real services,
-edit `.env`:
-
-| Want | Set | Also need |
-|------|-----|-----------|
-| Real Claude extraction | `MOCK_EXTERNAL=false` | `ANTHROPIC_API_KEY` |
-| + real Jira tickets | `MOCK_EXTERNAL=false` | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
-| + real embedding dedup | `MOCK_EXTERNAL=false` | `GEMINI_API_KEY` |
-| Interactive Slack buttons | `GATE_MODE=slack` | Slack bot token + `SLACK_APP_TOKEN` (Socket Mode — no ngrok) |
-| Read your real Slack channel | `INGEST_SOURCE=slack` | bot in channel + `channels:history` scope |
-| Open real GitHub PRs | `CREATE_REAL_PR=true` | `gh auth login` |
-
-With `MOCK_EXTERNAL=false`, each service goes live **only if its own
-credentials are present** and otherwise falls back to mock — so you can enable
-them one at a time (e.g. real Jira while extraction stays mock). No key is
-strictly required; you just get a warning if you run live without a Claude key.
-The interactive Slack handlers live in `src/slack/actions.js` and are wired
-through `createSlackApp()`.
-
-Example — real Jira only, everything else mock:
+## Scheduled daemon
 
 ```bash
-# fill JIRA_* in .env, then:
-MOCK_EXTERNAL=false npm run demo
+npm run watch
 ```
 
-```bash
-# fastest live test — real Claude, everything else mock, gates auto-approve
-MOCK_EXTERNAL=false ANTHROPIC_API_KEY=sk-ant-... npm run demo
-```
+Keeps Socket Mode connected (buttons/edits work anytime) and runs the pipeline
+on a schedule, reading **only new messages** since the last run (per-channel
+watermark). Defaults: every 2h, weekdays 09:00–18:00 — overnight messages are
+processed by the first morning tick. Empty ticks post nothing.
+
+Tunables: `WATCH_INTERVAL_MS`, `WATCH_START_HOUR`, `WATCH_END_HOUR`, `WATCH_DAYS`.
+
+**Deploy**: needs an always-on process (Socket Mode). Cheapest free options —
+your own always-on machine + `pm2`, an Oracle Cloud Always-Free VM, or Fly.io;
+pair with free [Upstash Redis](https://upstash.com) (`REDIS_URL`) so the
+watermark + gate state survive restarts.
+
+---
+
+## Config reference
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `MOCK_EXTERNAL` | `true` | mock all external services; `false` = live per available key |
+| `INGEST_SOURCE` | `fixtures` | `fixtures` or `slack` (live channel) |
+| `INGEST_WATERMARK` | `false` | read only new messages since last run (on for `watch`) |
+| `GATE_MODE` | `auto` | `auto` (auto-approve) · `cli` (terminal) · `slack` (buttons) |
+| `GATE_AUTO_APPROVE_MS` | `8000` | auto-approve delay in `auto` mode |
+| `AGENT_MODE` | `symbolic` | `symbolic` (canned diffs) or `live` (Claude writes code) |
+| `AGENT_TASK_LIMIT` | `1` | how many tickets the agent processes (in parallel) |
+| `CREATE_REAL_PR` | `false` | open a real PR via `gh`, else mock |
+
+---
 
 ## Layout
 
 ```
 src/
   config.js          model constant + env + demo/agent flags
-  ingestion/         normalize sources → context packets (fixtures + slackLive)
-  extraction/        Claude forced tool use → tasks (+ mock)
-  gates/             Gate 1/2/4 review (cli / auto / slack) + Gate 3 + cli prompts
-  slack/             Block Kit builders + Socket Mode action handlers
-  state/             Redis-backed gate state (in-memory fallback)
+  ingestion/         fixtures + slackLive (watermark) → context packets
+  extraction/        Claude tool use → tasks · prd.js (codebase-grounded PRD)
   dedup/             JQL + Gemini embedding dedup
-  jira/              ticket create / transition / ADF
-  agent/             assign · execute (symbolic/live) · summarize · memory(stub)
-  github/            PR creation via gh (+ mock)
-  ui.js              terminal presentation helpers
-  orchestrator.js    wires all phases
-  demo.js            entrypoint (starts Socket Mode app in slack gate mode)
+  jira/              ticket create / update / transition · ADF (incl. PRD ADF)
+  gates/             Gate 1/2/4 (cli·auto·slack) + Gate 3 + cli prompts
+  slack/             Block Kit · Socket Mode actions · converse (thread edits) · run thread
+  agent/             assign · executor (worktree, symbolic/live) · editor · summarizer · memory(stub)
+  github/            PR create + merge via gh (+ mock)
+  state/             Redis-backed gate state · watermark (in-memory fallback)
+  ui.js              terminal presentation
+  orchestrator.js    wires all phases (agent stage runs in parallel)
+  demo.js            one-shot entrypoint     watch.js  scheduled daemon
 demo-app/            synthetic target codebase the agent edits
 fixtures/            synthetic Slack / Meet / calendar data
-demo/                copy-paste Slack conversations for recording
+demo/                copy-paste Slack conversations + meeting transcript (recording props)
+scripts/             reset-demo-app.js
 plan/                phase-by-phase build plan + spec
 ```
 
-## Build plan
+## Notes
 
-Phase docs live in [`plan/`](./plan/). See [`plan/README.md`](./plan/README.md)
-for the phase overview.
+- **Models**: Claude `claude-sonnet-4-6` (config constant); embeddings `gemini-embedding-001`.
+- **Reliability**: external calls wrapped in try/catch + retry; secrets via env only.
+- The downstream **3-layer memory** is stubbed (`src/agent/memory.js`); everything else runs.
