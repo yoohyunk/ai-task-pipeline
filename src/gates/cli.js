@@ -163,9 +163,10 @@ async function askGate4(ticket, pr, summary) {
     if (summary.remaining) console.log(`   ${ui.dim('Left')}    ${summary.remaining}`);
   }
   console.log('');
-  console.log(ui.dim('   commands:  [enter] approve & merge   ·   r request changes'));
+  console.log(ui.dim('   commands:  [enter] approve & merge   ·   or type feedback to request changes'));
   const cmd = await prompt('   ▸ ');
-  return cmd === 'r' || cmd === 'reject' ? 'rejected' : 'approved';
+  if (cmd === '' || cmd === 'a' || cmd === 'approve') return { action: 'approved' };
+  return { action: 'changes', feedback: cmd };
 }
 
 module.exports = { askGate1, askGate2, askGate4, prompt, closeCli };

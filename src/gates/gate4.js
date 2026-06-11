@@ -18,6 +18,9 @@ const notifier = require('../slack/notifier');
 
 const MAX_REWORK_CYCLES = 3;
 
+/**
+ * @returns {Promise<{action: 'approved'|'changes', feedback?: string}>}
+ */
 async function runGate4(ticket, pr, summary, assignment) {
   // Post the "agent finished — review needed" message (real Slack when live).
   await notifier.sendAgentReview(ticket, pr, summary, assignment);
@@ -27,22 +30,29 @@ async function runGate4(ticket, pr, summary, assignment) {
     return askGate4(ticket, pr, summary);
   }
 
-  // Slack mode — wait for the Approve / Request changes button.
+  // Slack mode — wait for the Approve button or a thread reply (= feedback).
   if (config.demo.gateMode === 'slack') {
     const store = require('../state/gateStore');
+    const converse = require('../slack/converse');
+    const rootTs = require('../slack/runContext').rootTs();
     const key = `gate4:${ticket.key}`;
     await store.set(key, { status: 'pending' });
+    if (rootTs) await converse.addActiveGate4(rootTs, ticket.key);
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    for (;;) {
-      const s = await store.get(key);
-      if (s && s.status === 'approved') return 'approved';
-      if (s && s.status === 'rejected') return 'rejected';
-      await sleep(2000);
+    try {
+      for (;;) {
+        const s = await store.get(key);
+        if (s && s.status === 'approved') return { action: 'approved' };
+        if (s && s.status === 'changes') return { action: 'changes', feedback: s.feedback };
+        await sleep(2000);
+      }
+    } finally {
+      if (rootTs) await converse.removeActiveGate4(rootTs, ticket.key);
     }
   }
 
   console.log(`✅ [Gate 4] auto-approved PR: ${pr?.prUrl || 'no PR'}`);
-  return 'approved';
+  return { action: 'approved' };
 }
 
 module.exports = { runGate4, MAX_REWORK_CYCLES };

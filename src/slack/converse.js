@@ -29,6 +29,39 @@ async function setActiveGate(rootTs, type, gateId) {
   await store.set(`activegate:${rootTs}`, { type, gateId });
 }
 
+// Track Gate 4 PRs awaiting review so a thread reply can request changes.
+async function addActiveGate4(rootTs, ticketKey) {
+  const k = `activegate4:${rootTs}`;
+  const cur = (await store.get(k)) || { keys: [] };
+  if (!cur.keys.includes(ticketKey)) cur.keys.push(ticketKey);
+  await store.set(k, cur);
+}
+async function removeActiveGate4(rootTs, ticketKey) {
+  const k = `activegate4:${rootTs}`;
+  const cur = (await store.get(k)) || { keys: [] };
+  cur.keys = cur.keys.filter((x) => x !== ticketKey);
+  await store.set(k, cur);
+}
+
+// A reply while PRs are in review = "request changes". Match by ticket key in
+// the text, or use the only pending one. Returns true if it handled the reply.
+async function handleGate4Reply(event, client, rootTs) {
+  const cur = (await store.get(`activegate4:${rootTs}`)) || { keys: [] };
+  if (!cur.keys.length) return false;
+  const m = (event.text || '').match(/\b([A-Z][A-Z0-9]+-\d+)\b/);
+  const target =
+    m && cur.keys.includes(m[1]) ? m[1] : cur.keys.length === 1 ? cur.keys[0] : null;
+  if (!target) return false;
+  await store.update(`gate4:${target}`, { status: 'changes', feedback: event.text });
+  await client.reactions
+    .add({ channel: event.channel, timestamp: event.ts, name: 'hammer_and_wrench' })
+    .catch(() => {});
+  await client.chat
+    .postMessage({ channel: event.channel, thread_ts: event.thread_ts, text: `🛠 ${target}: revising per your feedback…` })
+    .catch(() => {});
+  return true;
+}
+
 async function handleGate1Reply(event, client, gateId) {
   const state = await store.get(gate1Key(gateId));
   if (!state || state.status !== 'pending') {
@@ -116,6 +149,8 @@ function registerConversation(app) {
     let map = await store.get(threadKey(event.thread_ts));
     // run-thread mode: replies land on the run root → route to the active gate
     if (map && map.type === 'run') {
+      // a PR in review takes precedence — reply = request changes
+      if (await handleGate4Reply(event, client, event.thread_ts)) return;
       map = await store.get(`activegate:${event.thread_ts}`);
     }
     if (!map || !map.gateId) return; // not an editable gate thread right now
@@ -129,4 +164,10 @@ function registerConversation(app) {
   });
 }
 
-module.exports = { registerConversation, linkThread, setActiveGate };
+module.exports = {
+  registerConversation,
+  linkThread,
+  setActiveGate,
+  addActiveGate4,
+  removeActiveGate4,
+};

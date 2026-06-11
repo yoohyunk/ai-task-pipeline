@@ -8,10 +8,11 @@ const { runGate2 } = require('./gates/gate2');
 
 const { assignAgent } = require('./agent/assign');
 const { runGate3 } = require('./gates/gate3');
-const { executeTask, canHandle } = require('./agent/executor');
+const { executeTask, reviseTask, canHandle } = require('./agent/executor');
 const { generateSummary } = require('./agent/summarizer');
 const { createPR, mergePR } = require('./github/pr');
-const { runGate4 } = require('./gates/gate4');
+const { runGate4, MAX_REWORK_CYCLES } = require('./gates/gate4');
+const { newTaskLog, logAppend, logCompressIfNeeded } = require('./agent/memory');
 const jira = require('./jira/jira');
 
 // Build the agent's view of a confirmed ticket (carries original task hints).
@@ -102,7 +103,11 @@ async function run() {
       const work = await executeTask(ticket, assignment);
       ui.agent(`${ticket.key}  edited ${work.changedFiles.join(', ')}`);
 
-      const summary = await generateSummary(ticket, work.changedFiles, work.diffSummary, work.log);
+      // Layer 3 — running log of what was tried and the feedback so far.
+      const taskLog = newTaskLog(ticket);
+      logAppend(taskLog, `Initial change: ${work.diffSummary}`);
+
+      let summary = await generateSummary(ticket, work.changedFiles, work.diffSummary, work.log);
       const pr = await createPR({
         branch: work.branch,
         ticket,
@@ -113,13 +118,28 @@ async function run() {
       await jira.transitionIssue(ticket.key, 'In Review');
       ui.agent(`${ticket.key}  PR → ${pr.prUrl}  · In Review`);
 
-      const decision = await runGate4(ticket, pr, summary, assignment);
-      if (decision === 'approved') {
-        await mergePR(pr.prNumber);
-        await jira.transitionIssue(ticket.key, 'Done');
-        ui.ok(`${ticket.key} approved → PR merged → Jira Done`);
-      } else {
-        ui.note(`${ticket.key} ${decision} (PR left open)`);
+      // Gate 4 with a rework loop: approve → merge; request changes → agent
+      // revises on the same branch (using the Layer 3 log) and re-posts.
+      let cycle = 0;
+      for (;;) {
+        const decision = await runGate4(ticket, pr, summary, assignment);
+        if (decision.action === 'approved') {
+          await mergePR(pr.prNumber);
+          await jira.transitionIssue(ticket.key, 'Done');
+          ui.ok(`${ticket.key} approved → PR merged → Jira Done`);
+          break;
+        }
+        cycle += 1;
+        if (cycle > MAX_REWORK_CYCLES) {
+          ui.note(`${ticket.key} hit ${MAX_REWORK_CYCLES} rework cycles — PR left open`);
+          break;
+        }
+        ui.agent(`${ticket.key}  rework ${cycle}/${MAX_REWORK_CYCLES}: ${decision.feedback}`);
+        logAppend(taskLog, `Feedback ${cycle}: ${decision.feedback}`);
+        await logCompressIfNeeded(taskLog);
+        const rev = await reviseTask(ticket, pr.branch, decision.feedback, taskLog);
+        logAppend(taskLog, `Revision ${cycle}: ${rev.diffSummary}`);
+        summary = await generateSummary(ticket, rev.changedFiles, rev.diffSummary, taskLog.entries);
       }
       return pr;
     } catch (err) {

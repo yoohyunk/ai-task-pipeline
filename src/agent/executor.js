@@ -163,4 +163,71 @@ async function executeTask(ticket, assignment) {
   return { branch, changedFiles, diffSummary, newContent, log, applied: false };
 }
 
-module.exports = { executeTask, canHandle, selectChange, slug };
+async function liveRevise(filePath, currentContent, ticket, feedback, taskLog) {
+  const Anthropic = require('@anthropic-ai/sdk');
+  const { withRetry } = require('../util/retry');
+  const { logRender } = require('./memory');
+  const client = new Anthropic({ apiKey: config.claude.apiKey });
+  const history = taskLog ? logRender(taskLog) : '';
+  const prompt =
+    `You are revising ${filePath} for task "${ticket.title}".\n\n` +
+    `What you've done and the feedback so far:\n${history}\n\n` +
+    `Latest reviewer feedback: ${feedback}\n\n` +
+    `Current file content:\n\`\`\`js\n${currentContent}\n\`\`\`\n\n` +
+    `Return ONLY the complete revised file content, no explanation, no fences.`;
+  return withRetry(async () => {
+    const res = await client.messages.create({
+      model: config.claude.model,
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const text = res.content.find((b) => b.type === 'text')?.text || '';
+    return text.replace(/^```(?:js)?\n?/, '').replace(/\n?```\s*$/, '').trim() + '\n';
+  });
+}
+
+/**
+ * Revise an existing PR branch based on reviewer feedback (rework cycle).
+ * Commits onto the SAME branch so the open PR updates.
+ * @param {object} ticket
+ * @param {string} branch  - the existing PR branch
+ * @param {string} feedback
+ * @param {object} taskLog - Layer 3 running log
+ * @returns {Promise<{changedFiles, diffSummary, newContent, log}>}
+ */
+async function reviseTask(ticket, branch, feedback, taskLog) {
+  const change = selectChange(ticket.title);
+  const file = change ? change.file : 'demo-app/notes.js';
+  const abs = path.join(REPO_ROOT, file);
+  const current = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '// new file\n';
+
+  let newContent;
+  let diffSummary;
+  if (config.agent.mode === 'live') {
+    newContent = await liveRevise(file, current, ticket, feedback, taskLog);
+    diffSummary = `Revised ${file} per feedback: "${feedback}".`;
+  } else {
+    // Symbolic mode can't reason about free-form feedback; record it so a diff
+    // exists and the loop runs, but this is not an intelligent revision.
+    newContent = `${current.replace(/\s*$/, '')}\n// revised per feedback: ${feedback}\n`;
+    diffSummary = `Recorded feedback in ${file} (symbolic mode — not an intelligent revision).`;
+  }
+
+  if (config.agent.createRealPr) {
+    const wtPath = path.join(REPO_ROOT, '.worktrees', `${slug(branch)}-rev`);
+    const msg = `[${ticket.key}] revise: ${feedback}\n\n${diffSummary}\n\nThis revision was made by an AI agent.`;
+    git(`worktree add -q "${wtPath}" ${branch}`);
+    try {
+      fs.writeFileSync(path.join(wtPath, file), newContent);
+      execFileSync('git', ['add', file], { cwd: wtPath });
+      execFileSync('git', ['commit', '-q', '-m', msg], { cwd: wtPath });
+      execFileSync('git', ['push', '-q', 'origin', branch], { cwd: wtPath });
+    } finally {
+      git(`worktree remove --force "${wtPath}"`);
+    }
+  }
+
+  return { changedFiles: [file], diffSummary, newContent, log: [diffSummary] };
+}
+
+module.exports = { executeTask, reviseTask, canHandle, selectChange, slug };

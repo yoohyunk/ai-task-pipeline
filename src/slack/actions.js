@@ -190,8 +190,11 @@ function registerGate4Actions(app) {
   });
   app.action(/^gate4_changes_/, async ({ ack, action, body, client }) => {
     await ack();
-    await store.update(gate4Key(action.value), { status: 'rejected' });
-    await resolveGate4Message(client, body, action.value, '🔁 *Changes requested*');
+    await store.update(gate4Key(action.value), {
+      status: 'changes',
+      feedback: 'Please revise based on the review (reply in-thread for specifics).',
+    });
+    await resolveGate4Message(client, body, action.value, '🔁 *Changes requested* — agent is revising');
   });
 }
 
