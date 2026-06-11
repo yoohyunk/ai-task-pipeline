@@ -60,9 +60,10 @@ async function getEmbedding(text) {
     genAI = new GoogleGenerativeAI(config.gemini.apiKey);
   }
   return withRetry(async () => {
-    const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+    // text-embedding-004 was retired; gemini-embedding-001 is the current model.
+    const model = genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
     const result = await model.embedContent(String(text).slice(0, 2000));
-    return result.embedding.values; // 768-dim
+    return result.embedding.values;
   });
 }
 
