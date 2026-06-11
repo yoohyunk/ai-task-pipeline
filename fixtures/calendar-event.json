@@ -1,0 +1,8 @@
+{
+  "id": "evt_001",
+  "title": "Q2 Planning — Engineering",
+  "start": "2024-03-15T10:00:00Z",
+  "end": "2024-03-15T11:30:00Z",
+  "attendees": ["alice", "bob", "carol", "dave", "eve"],
+  "description": "Review Q2 roadmap. Topics: API v2 launch readiness, infra scaling plan, onboarding flow redesign, security audit follow-up items."
+}

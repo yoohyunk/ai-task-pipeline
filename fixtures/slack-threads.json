@@ -1,0 +1,31 @@
+[
+  {
+    "channel": "#dev",
+    "timestamp": "2024-03-14T10:00:00Z",
+    "thread": [
+      { "user": "alice", "text": "The login timeout bug is still happening on mobile safari. Users are getting logged out after 5 mins.", "ts": "1710410400.000" },
+      { "user": "bob",   "text": "Yeah I saw that too. We need to increase the session TTL and add a keep-alive ping.", "ts": "1710410460.000" },
+      { "user": "alice", "text": "Bob can you take that? It's blocking the demo next week.", "ts": "1710410520.000" },
+      { "user": "bob",   "text": "On it.", "ts": "1710410580.000" }
+    ]
+  },
+  {
+    "channel": "#infra",
+    "timestamp": "2024-03-14T14:30:00Z",
+    "thread": [
+      { "user": "carol", "text": "Staging DB is running out of disk, we're at 87% capacity.", "ts": "1710426600.000" },
+      { "user": "dave",  "text": "We should probably clean up the old migration snapshots and set up an alert at 80%.", "ts": "1710426660.000" },
+      { "user": "carol", "text": "Agreed. And probably worth bumping the volume too before the next release.", "ts": "1710426720.000" }
+    ]
+  },
+  {
+    "channel": "#product",
+    "timestamp": "2024-03-14T16:00:00Z",
+    "thread": [
+      { "user": "eve",   "text": "We decided in the meeting to go with the new onboarding flow for v2.", "ts": "1710432000.000" },
+      { "user": "frank", "text": "Great. Someone needs to update the Figma specs and brief the frontend team.", "ts": "1710432060.000" },
+      { "user": "eve",   "text": "I can do the Figma update, can you brief frontend Frank?", "ts": "1710432120.000" },
+      { "user": "frank", "text": "Sure.", "ts": "1710432180.000" }
+    ]
+  }
+]

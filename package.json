@@ -1,0 +1,23 @@
+{
+  "name": "task-pipeline",
+  "version": "0.1.0",
+  "description": "AI Task Pipeline — ingest team conversations, extract action items with Claude, human gates, dedup, and Jira ticket creation.",
+  "main": "src/orchestrator.js",
+  "scripts": {
+    "demo": "node src/demo.js",
+    "dev": "nodemon src/demo.js",
+    "start": "node src/orchestrator.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@google/generative-ai": "^0.21.0",
+    "@slack/bolt": "^4.2.0",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "redis": "^4.7.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
