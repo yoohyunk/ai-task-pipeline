@@ -134,9 +134,12 @@ Limited or simplified, stated plainly:
 - In symbolic mode the agent's revision step only records the feedback rather than
   reasoning about it. The intelligent revision is the live mode, where Claude
   rewrites the file.
-- Assignment uses two real signals: a named-owner proxy (did the conversation
-  name an owner) and the assignee's live open-issue load from Jira. The
-  skill-tag matching from the original spec is not built.
+- Assignment picks the owner by a rule (the name the conversation gave), so the
+  0.9/0.4 confidence is a proxy for "was an owner named", not a calibrated score.
+  The workload signal next to it is real: the assignee's live open-issue count
+  from Jira. Skill-tag matching from the original spec is not built, and the
+  thresholds are placeholders for where a calibrated assignment model would plug
+  in.
 - No real metrics: it is a prototype on synthetic data.
 
 ## Architecture
@@ -162,8 +165,10 @@ For my own reconciliation across the diagram, a resume line, and this write-up:
    un-threaded messages; the fixture chunker keeps each thread as one chunk.
 4. The embedding model is `gemini-embedding-001` (3072-dim), not the spec's retired
    `text-embedding-004` (768-dim). Cosine is dimension-agnostic, so behavior holds.
-5. Assignment uses the named-owner proxy plus a live Jira workload signal (the
-   assignee's open-issue count). The skill-tag matching from the spec is not built.
+5. Assignment selects the owner by rule (named-owner proxy, 0.9/0.4 confidence,
+   not a calibrated score) and reads a real Jira workload signal (open-issue
+   count). Skill-tag matching is not built; the thresholds are placeholders for a
+   calibrated model.
 6. `plan/claude-code-session-prompt.md` still contains the string "Orbit Sales" (in
    an instruction to remove it). If the repo is shared with reviewers, scrub that
    file so there is no client reference anywhere.
