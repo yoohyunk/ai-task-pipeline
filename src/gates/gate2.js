@@ -79,6 +79,32 @@ async function waitForGate(gateId, pollIntervalMs) {
  * @returns {Promise<object[]>} confirmed results (merges/deletes applied)
  */
 async function runGate2(results) {
+  // Interactive terminal mode — approve/delete/merge live.
+  if (config.demo.gateMode === 'cli') {
+    const cli = require('./cli');
+    // Use a throwaway gate id so applyMerge/handlers can persist state.
+    const gateId = randomUUID();
+    await store.set(key(gateId), {
+      gateId,
+      type: 'gate2',
+      status: 'pending',
+      tickets: results,
+    });
+    const onMerge = async (idx) => {
+      await applyMerge(gateId, idx);
+      const s = await store.get(key(gateId));
+      results[idx] = s.tickets[idx];
+    };
+    const onDelete = async (idx) => {
+      const t = results[idx];
+      if (t && t.issue?.key) {
+        await jira.deleteIssue(t.issue.key);
+        t._removed = true;
+      }
+    };
+    return cli.askGate2(results, onMerge, onDelete);
+  }
+
   const gateId = randomUUID();
   const now = Date.now();
 

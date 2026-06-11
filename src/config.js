@@ -23,13 +23,26 @@ const config = {
     url: process.env.REDIS_URL || 'redis://localhost:6379',
   },
   demo: {
-    // Gates auto-approve after a short delay so `npm run demo` runs end-to-end
-    // without a human clicking Slack buttons. Set GATE_AUTO_APPROVE=false to
-    // wait for real interaction.
+    // How human approval gates behave:
+    //   'auto'  — auto-approve after a short delay (hands-off)
+    //   'cli'   — interactive terminal prompts (approve/edit/remove)
+    //   'slack' — real Slack message + poll for button clicks
+    gateMode: process.env.GATE_MODE || 'auto',
+    // 'auto' mode: auto-approve after a short delay so the demo runs end-to-end
+    // without a human. Set GATE_AUTO_APPROVE=false to wait for real interaction.
     gateAutoApprove: process.env.GATE_AUTO_APPROVE !== 'false',
     gateAutoApproveMs: parseInt(process.env.GATE_AUTO_APPROVE_MS || '8000', 10),
     // When true, external services with missing keys fall back to mock mode.
     mockExternal: process.env.MOCK_EXTERNAL !== 'false',
+  },
+  agent: {
+    // 'symbolic' — apply pre-canned diffs to demo-app/ (no LLM, offline)
+    // 'live'     — Claude generates the code change (needs ANTHROPIC_API_KEY)
+    mode: process.env.AGENT_MODE || 'symbolic',
+    // How many confirmed tickets the agent processes (keeps demo PR noise low)
+    taskLimit: parseInt(process.env.AGENT_TASK_LIMIT || '1', 10),
+    // When true, open a real GitHub PR via `gh`; otherwise render the PR to console
+    createRealPr: process.env.CREATE_REAL_PR === 'true',
   },
 };
 

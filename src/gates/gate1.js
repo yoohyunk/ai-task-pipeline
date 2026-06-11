@@ -57,6 +57,14 @@ async function waitForGate(gateId, pollIntervalMs) {
  * @returns {Promise<object[]>}
  */
 async function runGate1(tasks) {
+  // Interactive terminal mode — approve/edit/remove live, no Redis/Slack needed.
+  if (config.demo.gateMode === 'cli') {
+    const cli = require('./cli');
+    const res = await cli.askGate1(tasks);
+    if (res.decision === 'rejected') throw new GateRejectedError('gate1-cli');
+    return res.tasks;
+  }
+
   const gateId = randomUUID();
   const now = Date.now();
 
