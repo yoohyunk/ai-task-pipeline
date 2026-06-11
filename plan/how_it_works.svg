@@ -69,8 +69,8 @@
 
   <!-- 6 Assign + Gate 3 -->
   <rect x="40" y="740" width="520" height="58" rx="8" fill="#e8f0fe" stroke="#4285f4"/>
-  <text x="56" y="764" class="h">6 · Assign (rule-based)  ·  🔑 Gate 3 assignment review</text>
-  <text x="56" y="785" class="s">Gate 3 auto-skips when confidence is high; otherwise prompts</text>
+  <text x="56" y="764" class="h">6 · Assign (named owner + live Jira load)  ·  🔑 Gate 3</text>
+  <text x="56" y="785" class="s">auto-skips when owner named, load &lt; 70%, not critical; else prompts</text>
 
   <!-- 7 Agent -->
   <rect x="40" y="822" width="520" height="86" rx="8" fill="#f3e8fd" stroke="#a142f4"/>

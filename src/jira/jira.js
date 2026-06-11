@@ -113,6 +113,26 @@ async function jqlSearch(title) {
   });
 }
 
+// Current workload for an assignee: count their open issues in the project and
+// normalize to a 0–1 load (capacity = LOAD_CAPACITY open issues = fully loaded).
+const LOAD_CAPACITY = 10;
+async function assigneeLoad(nameHint) {
+  if (mockJira || !nameHint) return { openIssues: 0, load: 0 };
+  return withRetry(async () => {
+    const accountId = await resolveAccountId(nameHint);
+    if (!accountId) return { openIssues: 0, load: 0 }; // can't find them → can't measure
+    const jql =
+      `project = "${config.jira.project}" AND assignee = "${accountId}" ` +
+      `AND statusCategory != Done`;
+    const { data } = await axios.get(`${config.jira.baseUrl}/rest/api/3/search/jql`, {
+      headers: jiraHeaders,
+      params: { jql, maxResults: 25, fields: 'summary' },
+    });
+    const openIssues = (data.issues || []).length;
+    return { openIssues, load: Math.min(1, openIssues / LOAD_CAPACITY) };
+  });
+}
+
 async function createTicket(task) {
   if (mockJira) return mockCreate(task);
 
@@ -209,6 +229,7 @@ module.exports = {
   issueUrl,
   extractKeywords,
   resolveAccountId,
+  assigneeLoad,
   jqlSearch,
   createTicket,
   updateIssue,

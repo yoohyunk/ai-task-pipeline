@@ -1,29 +1,38 @@
 /**
  * Agent auto-assignment.
  *
- * Simple rule-based assignment for the demo: trust the assignee hint extracted
- * from the conversation. High confidence when a hint exists so Gate 3 auto-skips.
+ * Assignment has two signals:
+ *   - confidence: a proxy for whether the conversation named an owner (0.9 if the
+ *     extractor pulled an assignee hint, 0.4 if not). Not a model probability.
+ *   - load: the assignee's real current workload (open Jira issues, normalized),
+ *     looked up live. 0 when we can't resolve the person or in mock mode.
+ * Gate 3 uses both to decide whether to auto-skip the assignment review.
  *
- * (A fuller version would use Claude to weigh skill tags + Jira workload —
- * see the original spec. Kept rule-based here to stay offline.)
+ * (Skill-tag matching from the original spec is not built.)
  *
  * @param {object} ticket  - { title, assignee_hint, priority }
- * @param {object[]} [team] - optional [{ username, skills, openIssues }]
- * @returns {Promise<{ assignee, reason, confidence }>}
+ * @returns {Promise<{ assignee, reason, confidence, load, openIssues }>}
  */
-async function assignAgent(ticket, team) {
+const jira = require('../jira/jira');
+
+async function assignAgent(ticket) {
   const hint = ticket.assignee_hint;
   if (hint) {
+    const { openIssues, load } = await jira.assigneeLoad(hint);
     return {
       assignee: hint,
-      reason: `Named/implied in the source conversation as the owner of "${ticket.title}".`,
+      reason: `Named/implied as the owner of "${ticket.title}" (${openIssues} open issues now).`,
       confidence: 0.9,
+      load,
+      openIssues,
     };
   }
   return {
     assignee: 'unassigned',
     reason: 'No owner could be inferred from the conversation.',
     confidence: 0.4,
+    load: 0,
+    openIssues: 0,
   };
 }
 

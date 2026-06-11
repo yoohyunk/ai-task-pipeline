@@ -4,26 +4,26 @@
  * EARLY STAGE ONLY — remove once assignment confidence is consistently high.
  *
  * Auto-skip when all hold:
- *   - assignment.confidence > 0.85
- *   - assignee load < 0.70   (no live workload source in the demo → assume 0.5)
+ *   - assignment.confidence > 0.85   (the conversation named an owner)
+ *   - assignment.load < 0.70         (assignee's real open-issue load)
  *   - ticket.priority !== 'critical'
  *
  * Otherwise prompt (CLI mode) or auto-approve.
  */
 const config = require('../config');
 
-const ASSUMED_LOAD = 0.5;
-
 async function runGate3(ticket, assignment) {
+  const load = assignment.load ?? 0;
   const autoSkip =
     assignment.confidence > 0.85 &&
-    ASSUMED_LOAD < 0.7 &&
+    load < 0.7 &&
     ticket.priority !== 'critical';
 
   if (autoSkip) {
-    console.log(`⏭️  [Gate 3] auto-skipped — assign ${assignment.assignee} (confidence ${assignment.confidence})`);
+    console.log(`⏭️  [Gate 3] auto-skipped — assign ${assignment.assignee} (confidence ${assignment.confidence}, load ${load.toFixed(2)})`);
     return assignment;
   }
+  console.log(`🔎 [Gate 3] not skipped — ${assignment.assignee} load ${load.toFixed(2)}, priority ${ticket.priority}`);
 
   if (config.demo.gateMode === 'cli') {
     const { prompt } = require('./cli');
