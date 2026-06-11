@@ -165,14 +165,33 @@ const gate4Key = (ticketKey) => `gate4:${ticketKey}`;
  * Register Gate 4 handlers — approve & merge / request changes on the agent PR.
  * @param {import('@slack/bolt').App} app
  */
+async function resolveGate4Message(client, body, ticketKey, verdict) {
+  // Replace the agent PR message with a buttonless resolved banner.
+  if (!client || !body?.channel?.id || !body?.message?.ts) return;
+  const keep = (body.message.blocks || []).filter((b) => b.type !== 'actions');
+  keep.push({ type: 'section', text: { type: 'mrkdwn', text: verdict } });
+  try {
+    await client.chat.update({
+      channel: body.channel.id,
+      ts: body.message.ts,
+      text: `Gate 4 — ${ticketKey}`,
+      blocks: keep,
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 function registerGate4Actions(app) {
-  app.action(/^gate4_approve_/, async ({ ack, action }) => {
+  app.action(/^gate4_approve_/, async ({ ack, action, body, client }) => {
     await ack();
     await store.update(gate4Key(action.value), { status: 'approved' });
+    await resolveGate4Message(client, body, action.value, '✅ *Approved & merged*');
   });
-  app.action(/^gate4_changes_/, async ({ ack, action }) => {
+  app.action(/^gate4_changes_/, async ({ ack, action, body, client }) => {
     await ack();
     await store.update(gate4Key(action.value), { status: 'rejected' });
+    await resolveGate4Message(client, body, action.value, '🔁 *Changes requested*');
   });
 }
 

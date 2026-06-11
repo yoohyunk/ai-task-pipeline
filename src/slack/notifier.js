@@ -17,7 +17,10 @@ function getClient() {
 }
 
 // ── Gate 1 (task review) blocks ──────────────────────────────────────────
-function buildGate1Blocks(gateId, tasks) {
+// When status !== 'pending' the gate is resolved: drop all buttons and show a
+// result banner so it can't be clicked again.
+function buildGate1Blocks(gateId, tasks, status = 'pending', approvedBy) {
+  const resolved = status !== 'pending';
   const blocks = [
     {
       type: 'header',
@@ -25,13 +28,24 @@ function buildGate1Blocks(gateId, tasks) {
     },
     {
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: `${tasks.length} tasks extracted · gate \`${gateId}\`` }],
+      elements: [{ type: 'mrkdwn', text: `${tasks.length} tasks · gate \`${gateId}\`` }],
     },
-    { type: 'divider' },
   ];
 
-  tasks.forEach((task, idx) => {
+  if (resolved) {
+    const by = approvedBy ? ` by <@${approvedBy}>` : '';
     blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: status === 'approved' ? `✅ *Approved*${by}` : `❌ *Rejected*${by}`,
+      },
+    });
+  }
+  blocks.push({ type: 'divider' });
+
+  tasks.forEach((task, idx) => {
+    const section = {
       type: 'section',
       text: {
         type: 'mrkdwn',
@@ -39,7 +53,9 @@ function buildGate1Blocks(gateId, tasks) {
           `*${task.title}*\n${task.description}\n` +
           `Assignee: ${task.assignee_hint || 'TBD'} · Priority: ${task.priority} · Source: ${task.source}`,
       },
-      accessory: {
+    };
+    if (!resolved) {
+      section.accessory = {
         type: 'overflow',
         action_id: `task_action_${idx}`,
         options: [
@@ -47,17 +63,20 @@ function buildGate1Blocks(gateId, tasks) {
           { text: { type: 'plain_text', text: '✏️ Edit' }, value: `edit_${gateId}_${idx}` },
           { text: { type: 'plain_text', text: '🗑 Remove' }, value: `remove_${gateId}_${idx}` },
         ],
-      },
-    });
+      };
+    }
+    blocks.push(section);
   });
 
-  blocks.push({
-    type: 'actions',
-    elements: [
-      { type: 'button', text: { type: 'plain_text', text: 'Approve all ✅' }, style: 'primary', action_id: 'gate1_approve_all', value: gateId },
-      { type: 'button', text: { type: 'plain_text', text: 'Reject all ❌' }, style: 'danger', action_id: 'gate1_reject_all', value: gateId },
-    ],
-  });
+  if (!resolved) {
+    blocks.push({
+      type: 'actions',
+      elements: [
+        { type: 'button', text: { type: 'plain_text', text: 'Approve all ✅' }, style: 'primary', action_id: 'gate1_approve_all', value: gateId },
+        { type: 'button', text: { type: 'plain_text', text: 'Reject all ❌' }, style: 'danger', action_id: 'gate1_reject_all', value: gateId },
+      ],
+    });
+  }
 
   return blocks;
 }
@@ -94,7 +113,7 @@ function pct(score) {
   return `${Math.round(score * 100)}%`;
 }
 
-function buildGate2TicketBlocks(gateId, ticket, idx) {
+function buildGate2TicketBlocks(gateId, ticket, idx, resolved = false) {
   // Skipped duplicate — info only, no actions
   if (ticket.status === 'duplicate') {
     return [
@@ -112,7 +131,7 @@ function buildGate2TicketBlocks(gateId, ticket, idx) {
 
   // Possible duplicate — side-by-side comparison + 3 choices
   if (ticket.status === 'created_with_warning') {
-    return [
+    const b = [
       {
         type: 'section',
         text: {
@@ -124,19 +143,22 @@ function buildGate2TicketBlocks(gateId, ticket, idx) {
             `<${issueUrlSafe(ticket.similarTo.key)}|View ${ticket.similarTo.key}>`,
         },
       },
-      {
+    ];
+    if (!resolved) {
+      b.push({
         type: 'actions',
         elements: [
           { type: 'button', text: { type: 'plain_text', text: 'Keep separate ✅' }, style: 'primary', action_id: `gate2_keep_${idx}`, value: `${gateId}_${idx}` },
           { type: 'button', text: { type: 'plain_text', text: `Merge → ${ticket.similarTo.key} 🔗` }, action_id: `gate2_merge_${idx}`, value: `${gateId}_${idx}` },
           { type: 'button', text: { type: 'plain_text', text: 'Delete 🗑' }, style: 'danger', action_id: `gate2_delete_${idx}`, value: `${gateId}_${idx}` },
         ],
-      },
-    ];
+      });
+    }
+    return b;
   }
 
   // Normal created ticket
-  return [
+  const b = [
     {
       type: 'section',
       text: {
@@ -146,33 +168,42 @@ function buildGate2TicketBlocks(gateId, ticket, idx) {
           `<${issueUrlSafe(ticket.issue.key)}|View in Jira>`,
       },
     },
-    {
+  ];
+  if (!resolved) {
+    b.push({
       type: 'actions',
       elements: [
         { type: 'button', text: { type: 'plain_text', text: 'Approve ✅' }, style: 'primary', action_id: `gate2_approve_${idx}`, value: `${gateId}_${idx}` },
         { type: 'button', text: { type: 'plain_text', text: 'Delete ticket 🗑' }, style: 'danger', action_id: `gate2_delete_${idx}`, value: `${gateId}_${idx}` },
       ],
-    },
-  ];
+    });
+  }
+  return b;
 }
 
-function buildGate2Blocks(gateId, tickets) {
+function buildGate2Blocks(gateId, tickets, status = 'pending') {
+  const resolved = status !== 'pending';
   const created = tickets.filter((t) => t.status !== 'duplicate').length;
   const blocks = [
     { type: 'header', text: { type: 'plain_text', text: '🎫 Gate 2 — Review created tickets' } },
     { type: 'context', elements: [{ type: 'mrkdwn', text: `${created} tickets created · gate \`${gateId}\`` }] },
-    { type: 'divider' },
   ];
+  if (resolved) {
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: '✅ *Confirmed*' } });
+  }
+  blocks.push({ type: 'divider' });
   tickets.forEach((t, idx) => {
-    blocks.push(...buildGate2TicketBlocks(gateId, t, idx));
+    blocks.push(...buildGate2TicketBlocks(gateId, t, idx, resolved));
     blocks.push({ type: 'divider' });
   });
-  blocks.push({
-    type: 'actions',
-    elements: [
-      { type: 'button', text: { type: 'plain_text', text: 'Approve all ✅' }, style: 'primary', action_id: 'gate2_approve_all', value: gateId },
-    ],
-  });
+  if (!resolved) {
+    blocks.push({
+      type: 'actions',
+      elements: [
+        { type: 'button', text: { type: 'plain_text', text: 'Approve all ✅' }, style: 'primary', action_id: 'gate2_approve_all', value: gateId },
+      ],
+    });
+  }
   return blocks;
 }
 
@@ -216,7 +247,7 @@ async function updateGate1(gateState) {
     channel: gateState.channelId,
     ts: gateState.messageTs,
     text: `Gate 1 — ${gateState.status}`,
-    blocks: buildGate1Blocks(gateState.gateId, gateState.tasks),
+    blocks: buildGate1Blocks(gateState.gateId, gateState.tasks, gateState.status, gateState.approvedBy),
   });
 }
 
@@ -259,7 +290,7 @@ async function updateGate2(gateState) {
     channel: gateState.channelId,
     ts: gateState.messageTs,
     text: `Gate 2 — ${gateState.status}`,
-    blocks: buildGate2Blocks(gateState.gateId, gateState.tickets),
+    blocks: buildGate2Blocks(gateState.gateId, gateState.tickets, gateState.status),
   });
 }
 
