@@ -11,6 +11,7 @@
 const config = require('../config');
 const store = require('../state/gateStore');
 const jira = require('../jira/jira');
+const { generatePRD } = require('../extraction/prd');
 const { withRetry } = require('../util/retry');
 
 const mockGemini = config.demo.mockExternal || !config.gemini.apiKey;
@@ -109,6 +110,9 @@ async function dedupAndCreate(task) {
       message: `${Math.round(best.score * 100)}% match with ${best.issue.key}`,
     };
   }
+
+  // Generate a PRD for the ticket body (skipped for duplicates above).
+  if (!task.prd) task.prd = await generatePRD(task);
 
   // Create the ticket
   const issue = await jira.createTicket(task);

@@ -5,7 +5,7 @@
  */
 const axios = require('axios');
 const config = require('../config');
-const { toADF } = require('./adf');
+const { toADF, prdToADF } = require('./adf');
 const { withRetry } = require('../util/retry');
 
 const mockJira = config.demo.mockExternal || !config.jira.token || !config.jira.baseUrl;
@@ -120,7 +120,7 @@ async function createTicket(task) {
   const fields = {
     project: { key: config.jira.project },
     summary: task.title,
-    description: toADF(task.description),
+    description: task.prd ? prdToADF(task.prd, task) : toADF(task.description),
     issuetype: { name: 'Task' },
     priority: { name: mapPriority(task.priority) },
     labels: [task.source, 'ai-generated'],
