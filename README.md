@@ -25,8 +25,30 @@ Slack / Jira / Gemini.
 
 ## Environment
 
-See `.env.example`. Required: `ANTHROPIC_API_KEY`. Everything else is optional
-and falls back to mock mode when missing.
+See `.env.example`. With the defaults (`MOCK_EXTERNAL=true`) nothing is required
+and the demo runs fully offline. Everything falls back to mock mode when missing.
+
+## Switching from mock to live
+
+The pipeline ships in mock mode so it runs with no keys. To hit real services,
+edit `.env`:
+
+| Want | Set | Also need |
+|------|-----|-----------|
+| Real Claude extraction | `MOCK_EXTERNAL=false` | `ANTHROPIC_API_KEY` |
+| + real Jira tickets | `MOCK_EXTERNAL=false` | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
+| + real embedding dedup | `MOCK_EXTERNAL=false` | `GEMINI_API_KEY` |
+| Wait for real Slack clicks | `GATE_AUTO_APPROVE=false` | Slack bot token + a running Bolt server (Socket Mode or a public endpoint via ngrok) for button callbacks |
+
+`MOCK_EXTERNAL=false` makes `ANTHROPIC_API_KEY` mandatory; the other services
+each fall back to mock independently if their keys are absent, so you can enable
+them one at a time. The interactive Slack handlers live in
+`src/slack/actions.js` and are wired through `createSlackApp()`.
+
+```bash
+# fastest live test — real Claude, everything else mock, gates auto-approve
+MOCK_EXTERNAL=false ANTHROPIC_API_KEY=sk-ant-... npm run demo
+```
 
 ## Layout
 
