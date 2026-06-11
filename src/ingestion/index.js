@@ -1,7 +1,6 @@
 const config = require('../config');
 const { buildContext } = require('./contextBuilder');
 const slackFixture = require('../../fixtures/slack-threads.json');
-const meetFixture = require('../../fixtures/meet-transcript.json');
 const calFixture = require('../../fixtures/calendar-event.json');
 
 /**
@@ -21,9 +20,13 @@ async function ingest() {
     return buildContext({ slack });
   }
 
+  // Meet auto-upgrades to the live Google Meet API when OAuth keys are present;
+  // otherwise it returns the fixture (the demo path).
+  const { fetchMeetTranscript } = require('./meetLive');
+  const meet = await fetchMeetTranscript();
   return buildContext({
     slack: slackFixture,
-    meet: meetFixture,
+    meet,
     calendar: calFixture,
   });
 }

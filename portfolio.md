@@ -140,6 +140,9 @@ Limited or simplified, stated plainly:
   from Jira. Skill-tag matching from the original spec is not built, and the
   thresholds are placeholders for where a calibrated assignment model would plug
   in.
+- Meet ingestion has a live Google Meet API path with a fixture fallback, but it
+  is not verified against a real Workspace (no OAuth keys yet). The demo and
+  everything else verified use the fixture; only the fallback is tested.
 - No real metrics: it is a prototype on synthetic data.
 
 ## Architecture

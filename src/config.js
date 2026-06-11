@@ -8,6 +8,13 @@ const config = {
   gemini: {
     apiKey: process.env.GEMINI_API_KEY,
   },
+  google: {
+    // Google Meet API (OAuth) for live meeting transcripts. When absent, meet
+    // ingestion falls back to the fixture.
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
+  },
   jira: {
     baseUrl: process.env.JIRA_BASE_URL,
     email: process.env.JIRA_EMAIL,
