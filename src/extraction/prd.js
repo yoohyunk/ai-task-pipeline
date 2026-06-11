@@ -3,10 +3,29 @@
  * as the Jira ticket body. Claude tool use for real output; deterministic
  * template in mock mode.
  */
+const fs = require('fs');
+const path = require('path');
 const config = require('../config');
 const { withRetry } = require('../util/retry');
 
+const REPO_ROOT = path.resolve(__dirname, '../..');
 const shouldMock = config.demo.mockExternal || !config.claude.apiKey;
+
+// Ground the PRD in the actual codebase: find the file(s) the task most likely
+// touches, read them, and hand the current contents to Claude.
+function gatherCodeContext(task) {
+  try {
+    const { selectChange } = require('../agent/executor');
+    const change = selectChange(task.title);
+    if (!change) return '';
+    const abs = path.join(REPO_ROOT, change.file);
+    if (!fs.existsSync(abs)) return '';
+    const content = fs.readFileSync(abs, 'utf8').slice(0, 2000);
+    return `Relevant existing file — ${change.file}:\n\`\`\`\n${content}\n\`\`\``;
+  } catch {
+    return '';
+  }
+}
 
 const PRD_TOOL = {
   name: 'write_prd',
@@ -44,6 +63,8 @@ function mockPRD(task) {
 async function generatePRD(task) {
   if (shouldMock) return mockPRD(task);
 
+  const codeContext = gatherCodeContext(task);
+
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey: config.claude.apiKey });
   return withRetry(async () => {
@@ -56,11 +77,14 @@ async function generatePRD(task) {
         {
           role: 'user',
           content:
-            `Write a short PRD for this task ticket.\n\n` +
+            `Write a short PRD for this task ticket. Ground it in the actual ` +
+            `codebase shown below — reference the real file and current values ` +
+            `where relevant, and make requirements concrete to this code.\n\n` +
             `Title: ${task.title}\n` +
             `Context: ${task.description}\n` +
             `Source: ${task.source}${task.sourceChannel ? ` (${task.sourceChannel})` : ''}\n` +
-            `Priority: ${task.priority}`,
+            `Priority: ${task.priority}\n\n` +
+            `${codeContext || '(no matching source file found in the codebase)'}`,
         },
       ],
     });

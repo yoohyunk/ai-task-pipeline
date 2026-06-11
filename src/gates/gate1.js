@@ -89,6 +89,12 @@ async function runGate1(tasks) {
   };
   await store.set(key(gateId), state);
 
+  // Let thread replies on this message edit the gate conversationally.
+  if (config.demo.gateMode === 'slack') {
+    const { linkThread } = require('../slack/converse');
+    await linkThread(sent.ts, gateId, 'gate1');
+  }
+
   // Poll faster in auto-approve demo mode; slower for real human review.
   const pollMs = config.demo.gateAutoApprove ? 1000 : 5000;
   return waitForGate(gateId, pollMs);

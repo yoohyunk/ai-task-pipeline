@@ -220,6 +220,7 @@ function createSlackApp() {
   registerGate1Actions(app);
   registerGate2Actions(app);
   registerGate4Actions(app);
+  require('./converse').registerConversation(app);
   return app;
 }
 
