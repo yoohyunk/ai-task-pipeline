@@ -12,7 +12,7 @@ const { executeTask, reviseTask, canHandle } = require('./agent/executor');
 const { generateSummary } = require('./agent/summarizer');
 const { createPR, mergePR } = require('./github/pr');
 const { runGate4, MAX_REWORK_CYCLES } = require('./gates/gate4');
-const { newTaskLog, logAppend, logCompressIfNeeded } = require('./agent/memory');
+const { newTaskLog, logAppend, logCompressIfNeeded, searchMemory, extractLessons, saveLesson } = require('./agent/memory');
 const jira = require('./jira/jira');
 
 // Build the agent's view of a confirmed ticket (carries original task hints).
@@ -99,8 +99,12 @@ async function run() {
       ui.agent(`${ticket.key}  assign → ${assignment.assignee}`);
       await runGate3(ticket, assignment);
 
+      // Layer 2 — retrieve lessons from past similar tasks and feed them in.
+      const lessons = await searchMemory(`${ticket.title} ${ticket.description}`);
+      if (lessons.length) ui.note(`${ticket.key} recalled ${lessons.length} past lesson(s)`);
+
       await jira.transitionIssue(ticket.key, 'In Progress');
-      const work = await executeTask(ticket, assignment);
+      const work = await executeTask(ticket, assignment, lessons);
       ui.agent(`${ticket.key}  edited ${work.changedFiles.join(', ')}`);
 
       // Layer 3 — running log of what was tried and the feedback so far.
@@ -127,6 +131,12 @@ async function run() {
           await mergePR(pr.prNumber);
           await jira.transitionIssue(ticket.key, 'Done');
           ui.ok(`${ticket.key} approved → PR merged → Jira Done`);
+          // Layer 2 — remember lessons from this task for next time.
+          try {
+            const learned = await extractLessons(ticket, taskLog);
+            for (const l of learned) await saveLesson(ticket.key, ticket.key, l);
+            if (learned.length) ui.note(`${ticket.key} saved ${learned.length} lesson(s) to memory`);
+          } catch { /* non-fatal */ }
           break;
         }
         cycle += 1;

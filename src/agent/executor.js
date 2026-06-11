@@ -75,13 +75,18 @@ function git(cmd) {
   return execSync(`git ${cmd}`, { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
 }
 
-async function liveRewrite(filePath, currentContent, ticket) {
+async function liveRewrite(filePath, currentContent, ticket, lessons = []) {
   const Anthropic = require('@anthropic-ai/sdk');
   const { withRetry } = require('../util/retry');
   const client = new Anthropic({ apiKey: config.claude.apiKey });
+  const lessonText = lessons.length
+    ? `\nLessons from past similar tasks (apply if relevant):\n${lessons.map((l) => `- ${l.lesson}`).join('\n')}\n`
+    : '';
+  const projectContext = require('./memory').getProjectContext();
   const prompt =
+    `${projectContext}\n\n` +
     `You are editing the file ${filePath} to implement this task:\n\n` +
-    `Title: ${ticket.title}\nDescription: ${ticket.description}\n\n` +
+    `Title: ${ticket.title}\nDescription: ${ticket.description}\n${lessonText}\n` +
     `Current file content:\n\`\`\`js\n${currentContent}\n\`\`\`\n\n` +
     `Return ONLY the complete new file content, no explanation, no code fences.`;
   return withRetry(async () => {
@@ -101,7 +106,7 @@ async function liveRewrite(filePath, currentContent, ticket) {
  * @param {object} assignment - output of assignAgent()
  * @returns {Promise<{branch, changedFiles, diffSummary, log, applied}>}
  */
-async function executeTask(ticket, assignment) {
+async function executeTask(ticket, assignment, lessons = []) {
   const log = [];
   const branch = `agent/${ticket.key}-${slug(ticket.title)}`;
   const change = selectChange(ticket.title);
@@ -116,7 +121,7 @@ async function executeTask(ticket, assignment) {
     const abs = path.join(REPO_ROOT, file);
     const current = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '// new file\n';
     log.push(`Claude rewriting ${file} for "${ticket.title}"`);
-    newContent = await liveRewrite(file, current, ticket);
+    newContent = await liveRewrite(file, current, ticket, lessons);
     diffSummary = `Claude-generated change to ${file}.`;
   } else if (change) {
     file = change.file;

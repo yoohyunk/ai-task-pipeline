@@ -27,13 +27,68 @@ function getProjectContext() {
   ].join(' ');
 }
 
-// ── Layer 2 — accumulated lessons (vector search) ── (not yet wired in) ───
-async function searchMemory(query) {
-  // TODO: embed query, search vector DB, return top-k lessons
-  return [];
-}
+// ── Layer 2 — accumulated lessons (vector search) ─────────────────────────
+// After a task is done, extract reusable lessons, embed them, and store them.
+// On a new task, retrieve the most similar lessons and inject them. Reuses the
+// same Gemini embedding + cosine + Redis the dedup layer uses. (lazy requires
+// avoid a load-time cycle: dedup → prd → executor → memory)
+const store = require('../state/gateStore');
+const LESSONS_KEY = 'lessons';
+
+const embed = (t) => require('../dedup/dedup').getEmbedding(t);
+const cosine = (a, b) => require('../dedup/dedup').cosineSimilarity(a, b);
+
 async function saveLesson(taskId, ticketKey, lesson) {
-  // TODO: embed lesson, store in vector DB
+  if (!lesson) return;
+  const embedding = await embed(lesson);
+  const all = (await store.get(LESSONS_KEY)) || [];
+  all.push({ taskId, ticketKey, lesson, embedding });
+  await store.set(LESSONS_KEY, all);
+}
+
+async function searchMemory(query, k = 3) {
+  const all = (await store.get(LESSONS_KEY)) || [];
+  if (!all.length) return [];
+  const q = await embed(query);
+  return all
+    .map((l) => ({ lesson: l.lesson, ticketKey: l.ticketKey, score: cosine(q, l.embedding) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, k);
+}
+
+// Pull 1–3 reusable lessons out of a finished task (Claude, or a template offline).
+async function extractLessons(ticket, taskLog) {
+  if (config.demo.mockExternal || !config.claude.apiKey) {
+    return [`For "${ticket.title}"-type work, confirm exact config values with the reviewer before finalizing.`];
+  }
+  const Anthropic = require('@anthropic-ai/sdk');
+  const client = new Anthropic({ apiKey: config.claude.apiKey });
+  const tool = {
+    name: 'lessons',
+    description: 'Extract 1–3 short, reusable lessons for future similar tasks.',
+    input_schema: {
+      type: 'object',
+      properties: { lessons: { type: 'array', items: { type: 'string' } } },
+      required: ['lessons'],
+    },
+  };
+  const res = await client.messages.create({
+    model: config.claude.model,
+    max_tokens: 512,
+    tools: [tool],
+    tool_choice: { type: 'tool', name: 'lessons' },
+    messages: [
+      {
+        role: 'user',
+        content:
+          `Task: ${ticket.title}\n${ticket.description || ''}\n\n` +
+          `What happened (attempts + reviewer feedback):\n${logRender(taskLog)}\n\n` +
+          `Extract 1–3 short reusable lessons for future similar tasks (reviewer ` +
+          `preferences, gotchas). One sentence each.`,
+      },
+    ],
+  });
+  return res.content.find((b) => b.type === 'tool_use')?.input.lessons || [];
 }
 
 // ── Layer 3 — in-task continuity (running log + compression) ──────────────
@@ -86,6 +141,7 @@ module.exports = {
   getProjectContext,
   searchMemory,
   saveLesson,
+  extractLessons,
   newTaskLog,
   logAppend,
   logRender,
