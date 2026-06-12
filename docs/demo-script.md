@@ -36,8 +36,8 @@ On it, I'll add the rate limiter.
 
 ## Scene 1 — The source (0:20–0:45)
 
-- SCREEN: the Slack channel with the posted conversation. Briefly show the Google Doc meeting prop.
-- SAY: "Here's a real Slack thread. The pipeline can also read a meeting transcript and a calendar event. I'll run it against this channel live."
+- SCREEN: the Slack channel with the posted conversation, then the Google Doc meeting transcript.
+- SAY: "Here's a real Slack thread, and this meeting transcript. I'll run it live: it reads the channel for real, and reads the meeting from a fixture, since I don't have Google Meet API keys yet. Everything after this is real."
 
 ## Scene 2 — Ingest + extract (0:45–1:15)
 
@@ -101,8 +101,10 @@ On it, I'll add the rate limiter.
 
 ## Honesty reminders (so the video matches the code)
 
-- The meeting transcript is a fixture/prop. Do not claim live Google Meet; that
-  path is implemented but unverified.
+- A live `demo:slack` run reads the real Slack channel AND the meeting from a
+  fixture (`fixtures/meet-transcript.json`). So the meeting is genuinely read, but
+  from a fixture, not from a live Google Meet. Do not claim live Meet; that path is
+  implemented but unverified. Slack and everything downstream are live.
 - Gate 3 surfaces the workload signal in the terminal; it does not interactively
   block in Slack (no Slack Gate 3 UI was built).
 - Everything else shown (live Slack read, Jira create/update/transition, the PRD,

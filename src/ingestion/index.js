@@ -14,10 +14,12 @@ const calFixture = require('../../fixtures/calendar-event.json');
 async function ingest() {
   if (config.demo.ingestSource === 'slack') {
     const { fetchSlackThreads } = require('./slackLive');
-    const slack = await fetchSlackThreads();
-    // Live mode reads Slack only; meet/calendar can also be posted to the
-    // channel and will arrive as slack threads. (meet/calendar omitted → empty)
-    return buildContext({ slack });
+    const { fetchMeetTranscript } = require('./meetLive');
+    // Live Slack is real; the meeting comes from the Meet API when Google keys
+    // are present, else the fixture. So a live run shows real Slack alongside the
+    // (fixture) meeting, with everything downstream real. Calendar omitted here.
+    const [slack, meet] = await Promise.all([fetchSlackThreads(), fetchMeetTranscript()]);
+    return buildContext({ slack, meet });
   }
 
   // Meet auto-upgrades to the live Google Meet API when OAuth keys are present;
