@@ -1,13 +1,21 @@
 {
-  "meeting": "Sprint Planning — Week 11",
-  "date": "2024-03-14T09:00:00Z",
-  "participants": ["alice", "bob", "carol", "dave"],
+  "meeting": "Sprint Planning",
+  "date": "2026-06-05T09:00:00Z",
+  "participants": ["Eric Frazier", "Erica Kim", "Angelo"],
   "transcript": [
-    { "speaker": "alice", "text": "Let's talk about the auth service refactor. We haven't merged that PR yet and it's been sitting for two weeks." },
-    { "speaker": "bob",   "text": "I know, I still need to add integration tests before it can go in. I'll get to it by end of week." },
-    { "speaker": "carol", "text": "Also the API rate limiting we discussed last sprint — that's still not implemented. It's a security risk." },
-    { "speaker": "dave",  "text": "I can pick that up. Should probably document the limits in the API docs too once it's done." },
-    { "speaker": "alice", "text": "Good. One more thing — the error monitoring dashboard hasn't been updated since we switched to the new logger. It's showing wrong data." },
-    { "speaker": "bob",   "text": "That's on me, I'll fix the dashboard config this sprint." }
+    { "speaker": "Eric Frazier", "text": "Hello." },
+    { "speaker": "Erica Kim", "text": "Hello." },
+    { "speaker": "Eric Frazier", "text": "Can you hear me? I'm having some weird issues with devices, my camera failed to start for whatever reason." },
+    { "speaker": "Erica Kim", "text": "Yes, I can hear you." },
+    { "speaker": "Eric Frazier", "text": "Did you see the list I sent on Slack recently?" },
+    { "speaker": "Erica Kim", "text": "Yeah. Alright, let's run through it. First, the auth service refactor. That PR is still not merged and it has been sitting for two weeks. What is blocking it?" },
+    { "speaker": "Angelo", "text": "That is on me. The code is done, I just still need to add integration tests before it can go in. I will get to it by end of week." },
+    { "speaker": "Erica Kim", "text": "Okay, let's make sure it lands this sprint. Next, the API rate limiting we talked about last sprint still is not implemented. It is honestly a security risk at this point, anyone can hammer the endpoints." },
+    { "speaker": "Angelo", "text": "Yeah, we should close that out. Can you take it?" },
+    { "speaker": "Erica Kim", "text": "I will pick it up, and I will document the limits in the API docs too so it is not just tribal knowledge." },
+    { "speaker": "Angelo", "text": "One more thing before we wrap, the error monitoring dashboard has not been updated since we switched to the new logger. It is showing wrong data, so people are starting to ignore it." },
+    { "speaker": "Erica Kim", "text": "Can you fix that one?" },
+    { "speaker": "Angelo", "text": "Yeah, I will fix the dashboard config this sprint and repoint it at the new logger." },
+    { "speaker": "Erica Kim", "text": "Great. So, auth PR merged with tests on you, rate limiting plus docs on me, dashboard fix on you. Thanks." }
   ]
 }
